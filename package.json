@@ -1,0 +1,24 @@
+{
+  "name": "biddly",
+  "private": true,
+  "packageManager": "pnpm@10.15.0",
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "typecheck": "turbo typecheck",
+    "db:generate": "pnpm --filter @biddly/db prisma:generate",
+    "db:migrate": "pnpm --filter @biddly/db prisma:migrate",
+    "db:seed": "pnpm --filter @biddly/db prisma:seed",
+    "predev": "pnpm db:generate && pnpm --filter @biddly/contracts build && pnpm --filter @biddly/db build",
+    "db:deploy": "pnpm --filter @biddly/db prisma:deploy",
+    "db:studio": "pnpm --filter @biddly/db prisma:studio",
+    "db:push": "pnpm --filter @biddly/db prisma:push",
+    "local": "docker compose up -d && pnpm dev",
+    "local:stop": "docker compose down"
+  },
+  "devDependencies": {
+    "turbo": "^2.5.6",
+    "typescript": "^5.9.2"
+  }
+}

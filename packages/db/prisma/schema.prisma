@@ -1,0 +1,637 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum PlatformRole {
+  USER
+  PLATFORM_ADMIN
+}
+
+enum ChapterRole {
+  MEMBER
+  MODERATOR
+  CHAPTER_ADMIN
+}
+
+enum RecruitmentCycleStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum CandidateSource {
+  MANUAL
+  IMPORT
+  PUBLIC_FORM
+}
+
+enum CandidateFieldType {
+  SHORT_TEXT
+  LONG_TEXT
+  NUMBER
+  EMAIL
+  PHONE
+  DATE
+  YEAR
+  SELECT
+  MULTI_SELECT
+  BOOLEAN
+}
+
+enum PublicFieldMode {
+  HIDDEN
+  OPTIONAL
+  REQUIRED
+}
+
+enum CommentState {
+  VISIBLE
+  HIDDEN
+  REMOVED
+}
+
+enum ModerationReportStatus {
+  PENDING
+  DISMISSED
+  ACTIONED
+}
+
+enum ModerationReportReason {
+  INAPPROPRIATE
+  PERSONAL_ATTACK
+  SENSITIVE_INFORMATION
+  SPAM
+  OTHER
+}
+
+enum SubscriptionTerm {
+  SEMESTER
+  ACADEMIC_YEAR
+}
+
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  EXPIRED
+}
+
+enum AuditAction {
+  CHAPTER_CREATED
+  CHAPTER_UPDATED
+  BRANDING_UPDATED
+  SETTINGS_UPDATED
+  MEMBER_INVITED
+  MEMBER_ROLE_CHANGED
+  MEMBER_REMOVED
+  INVITE_REVOKED
+  CYCLE_CREATED
+  CYCLE_UPDATED
+  CYCLE_ACTIVATED
+  CYCLE_ARCHIVED
+  STATUS_CREATED
+  STATUS_UPDATED
+  STATUS_DELETED
+  FIELD_CREATED
+  FIELD_UPDATED
+  FIELD_DELETED
+  FORM_UPDATED
+  CANDIDATE_CREATED
+  CANDIDATE_UPDATED
+  CANDIDATE_ARCHIVED
+  CANDIDATE_RESTORED
+  CANDIDATE_STATUS_CHANGED
+  EVALUATION_UPDATED
+  COMMENT_CREATED
+  COMMENT_UPDATED
+  COMMENT_HIDDEN
+  COMMENT_RESTORED
+  COMMENT_REMOVED
+  REPORT_RESOLVED
+  IMPORT_COMPLETED
+  EXPORT_CREATED
+}
+
+model User {
+  id            String       @id @default(cuid())
+  email         String       @unique
+  passwordHash  String
+  firstName     String
+  lastName      String
+  emailVerified Boolean      @default(false)
+  isActive      Boolean      @default(true)
+  platformRole  PlatformRole @default(USER)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  membership          ChapterMembership?
+  evaluations         Evaluation[]
+  comments            Comment[]             @relation("CommentAuthor")
+  moderatedComments   Comment[]             @relation("CommentModerator")
+  reactions           CommentReaction[]
+  createdCandidates   Candidate[]           @relation("CandidateCreator")
+  archivedCandidates  Candidate[]           @relation("CandidateArchiver")
+  createdCycles       RecruitmentCycle[]    @relation("CycleCreator")
+  sentChapterInvites  ChapterInvite[]       @relation("ChapterInviteCreator")
+  chapterInviteUses   ChapterInviteUse[]
+  workspaceInvites    WorkspaceInvite[]     @relation("WorkspaceInviteCreator")
+  auditLogs           AuditLog[]
+  statusChanges       CandidateStatusHistory[]
+  moderationReports   ModerationReport[]    @relation("ReportAuthor")
+  reviewedReports     ModerationReport[]    @relation("ReportReviewer")
+  refreshTokens       RefreshToken[]
+  passwordResetTokens PasswordResetToken[]
+}
+
+model RefreshToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+}
+
+model Organization {
+  id             String   @id @default(cuid())
+  name           String   @unique
+  shortName      String?
+  slug           String   @unique
+  primaryColor   String?
+  secondaryColor String?
+  accentColor    String?
+  logoUrl        String?
+  crestUrl       String?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  chapters         Chapter[]
+  workspaceInvites WorkspaceInvite[]
+}
+
+model University {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  shortName String?
+  city      String?
+  state     String?
+  country   String   @default("US")
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  chapters         Chapter[]
+  workspaceInvites WorkspaceInvite[]
+}
+
+model Chapter {
+  id                       String   @id @default(cuid())
+  organizationId           String
+  universityId             String
+  name                     String
+  slug                     String   @unique
+  isActive                 Boolean  @default(true)
+  activeRecruitmentCycleId String?  @unique
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  organization           Organization          @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  university             University            @relation(fields: [universityId], references: [id], onDelete: Restrict)
+  branding               ChapterBranding?
+  settings               ChapterSettings?
+  memberships            ChapterMembership[]
+  recruitmentCycles      RecruitmentCycle[]    @relation("ChapterCycles")
+  activeRecruitmentCycle RecruitmentCycle?     @relation("ActiveCycle", fields: [activeRecruitmentCycleId], references: [id], onDelete: SetNull)
+  candidates             Candidate[]
+  evaluations            Evaluation[]
+  comments               Comment[]
+  reactions              CommentReaction[]
+  invites                ChapterInvite[]
+  auditLogs              AuditLog[]
+  reports                ModerationReport[]
+  subscriptions          ChapterSubscription[]
+
+  @@unique([organizationId, universityId])
+  @@index([organizationId])
+  @@index([universityId])
+}
+
+model ChapterBranding {
+  id             String   @id @default(cuid())
+  chapterId      String   @unique
+  primaryColor   String?
+  secondaryColor String?
+  accentColor    String?
+  logoUrl        String?
+  crestUrl       String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  chapter Chapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+}
+
+model ChapterSettings {
+  id               String   @id @default(cuid())
+  chapterId        String   @unique
+  commentsEnabled  Boolean  @default(true)
+  repliesEnabled   Boolean  @default(true)
+  reactionsEnabled Boolean  @default(true)
+  scoreMin         Float    @default(1)
+  scoreMax         Float    @default(10)
+  scoreStep        Float    @default(1)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  chapter Chapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+}
+
+model ChapterMembership {
+  id        String      @id @default(cuid())
+  userId    String      @unique
+  chapterId String
+  role      ChapterRole @default(MEMBER)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chapter Chapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+
+  @@index([chapterId, role])
+}
+
+model WorkspaceInvite {
+  id             String    @id @default(cuid())
+  email          String
+  tokenHash      String    @unique
+  organizationId String?
+  universityId   String?
+  chapterName    String?
+  createdById    String
+  expiresAt      DateTime
+  acceptedAt     DateTime?
+  acceptedUserId String?
+  acceptedChapterId String?
+  createdAt      DateTime  @default(now())
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  university   University?   @relation(fields: [universityId], references: [id], onDelete: SetNull)
+  createdBy    User          @relation("WorkspaceInviteCreator", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([email])
+  @@index([expiresAt])
+}
+
+model ChapterInvite {
+  id          String      @id @default(cuid())
+  chapterId   String
+  email       String?
+  label       String?
+  role        ChapterRole @default(MEMBER)
+  tokenHash   String      @unique
+  code        String?     @unique
+  createdById String
+  expiresAt   DateTime?
+  maxUses     Int?
+  useCount    Int         @default(0)
+  revokedAt   DateTime?
+  acceptedAt  DateTime?
+  createdAt   DateTime    @default(now())
+
+  chapter   Chapter            @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  createdBy User               @relation("ChapterInviteCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  uses      ChapterInviteUse[]
+
+  @@index([chapterId, email])
+  @@index([expiresAt])
+  @@index([chapterId, revokedAt])
+}
+
+model ChapterInviteUse {
+  id        String   @id @default(cuid())
+  inviteId  String
+  userId    String
+  usedAt    DateTime @default(now())
+
+  invite ChapterInvite @relation(fields: [inviteId], references: [id], onDelete: Cascade)
+  user   User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([inviteId, userId])
+  @@index([userId])
+}
+
+model RecruitmentCycle {
+  id          String                   @id @default(cuid())
+  chapterId   String
+  name        String
+  status      RecruitmentCycleStatus   @default(DRAFT)
+  startsAt    DateTime?
+  endsAt      DateTime?
+  createdById String
+  createdAt   DateTime                 @default(now())
+  updatedAt   DateTime                 @updatedAt
+
+  chapter          Chapter                    @relation("ChapterCycles", fields: [chapterId], references: [id], onDelete: Cascade)
+  activeForChapter Chapter?                   @relation("ActiveCycle")
+  createdBy        User                       @relation("CycleCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  statuses         CandidateStatus[]
+  fieldDefinitions CandidateFieldDefinition[]
+  publicForm       PublicRecruitmentForm?
+  candidates       Candidate[]
+  evaluations      Evaluation[]
+  comments         Comment[]
+  reactions        CommentReaction[]
+  statusHistory    CandidateStatusHistory[]
+  reports          ModerationReport[]
+
+  @@unique([chapterId, name])
+  @@index([chapterId, status])
+}
+
+model CandidateStatus {
+  id                 String   @id @default(cuid())
+  recruitmentCycleId String
+  name               String
+  position           Int
+  color              String?
+  isTerminal         Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  recruitmentCycle RecruitmentCycle       @relation(fields: [recruitmentCycleId], references: [id], onDelete: Cascade)
+  candidates       Candidate[]
+  historyFrom      CandidateStatusHistory[] @relation("StatusHistoryFrom")
+  historyTo        CandidateStatusHistory[] @relation("StatusHistoryTo")
+
+  @@unique([recruitmentCycleId, name])
+  @@unique([recruitmentCycleId, position])
+}
+
+model CandidateFieldDefinition {
+  id                  String             @id @default(cuid())
+  recruitmentCycleId  String
+  key                 String
+  label               String
+  type                CandidateFieldType
+  required            Boolean            @default(false)
+  visibleOnPublicForm Boolean            @default(false)
+  position            Int
+  options             Json?
+  validation          Json?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  recruitmentCycle RecruitmentCycle    @relation(fields: [recruitmentCycleId], references: [id], onDelete: Cascade)
+  values           CandidateFieldValue[]
+
+  @@unique([recruitmentCycleId, key])
+  @@unique([recruitmentCycleId, position])
+}
+
+model PublicRecruitmentForm {
+  id                  String          @id @default(cuid())
+  recruitmentCycleId  String          @unique
+  slug                String          @unique
+  isOpen              Boolean         @default(false)
+  title               String?
+  introText           String?
+  confirmationMessage String?
+  emailMode           PublicFieldMode @default(OPTIONAL)
+  phoneMode           PublicFieldMode @default(REQUIRED)
+  photoMode           PublicFieldMode @default(OPTIONAL)
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  recruitmentCycle RecruitmentCycle @relation(fields: [recruitmentCycleId], references: [id], onDelete: Cascade)
+}
+
+model Candidate {
+  id                 String          @id @default(cuid())
+  chapterId          String
+  recruitmentCycleId String
+  statusId           String
+  statusPosition     Int
+  firstName          String
+  lastName           String
+  email              String?
+  phone              String?
+  photoKey           String?
+  source             CandidateSource @default(MANUAL)
+  createdById        String?
+  archivedAt         DateTime?
+  archivedById       String?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  chapter          Chapter               @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  recruitmentCycle RecruitmentCycle      @relation(fields: [recruitmentCycleId], references: [id], onDelete: Cascade)
+  status           CandidateStatus       @relation(fields: [statusId], references: [id], onDelete: Restrict)
+  createdBy        User?                 @relation("CandidateCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  archivedBy       User?                 @relation("CandidateArchiver", fields: [archivedById], references: [id], onDelete: SetNull)
+  customValues     CandidateFieldValue[]
+  evaluations      Evaluation[]
+  aggregate        CandidateAggregate?
+  comments         Comment[]
+  statusHistory    CandidateStatusHistory[]
+
+  @@index([chapterId, recruitmentCycleId, archivedAt])
+  @@index([chapterId, recruitmentCycleId, statusPosition])
+  @@index([chapterId, lastName, firstName])
+  @@index([recruitmentCycleId, email])
+  @@index([recruitmentCycleId, phone])
+}
+
+model CandidateFieldValue {
+  id          String   @id @default(cuid())
+  candidateId String
+  fieldId     String
+  value       Json
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  candidate Candidate                @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  field     CandidateFieldDefinition @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+
+  @@unique([candidateId, fieldId])
+  @@index([fieldId])
+}
+
+model Evaluation {
+  id                 String   @id @default(cuid())
+  chapterId          String
+  recruitmentCycleId String
+  candidateId        String
+  userId             String
+  score              Float
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  chapter          Chapter          @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  recruitmentCycle RecruitmentCycle @relation(fields: [recruitmentCycleId], references: [id], onDelete: Cascade)
+  candidate        Candidate        @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([candidateId, userId])
+  @@index([chapterId, recruitmentCycleId])
+  @@index([candidateId, score])
+}
+
+model CandidateAggregate {
+  id              String   @id @default(cuid())
+  candidateId     String   @unique
+  averageScore    Float    @default(0)
+  evaluationCount Int      @default(0)
+  updatedAt       DateTime @updatedAt
+
+  candidate Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+}
+
+model CandidateStatusHistory {
+  id           String   @id @default(cuid())
+  candidateId  String
+  chapterId    String
+  recruitmentCycleId String
+  fromStatusId String?
+  toStatusId   String
+  changedById  String
+  createdAt    DateTime @default(now())
+
+  candidate        Candidate        @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  recruitmentCycle RecruitmentCycle @relation(fields: [recruitmentCycleId], references: [id], onDelete: Cascade)
+  fromStatus       CandidateStatus? @relation("StatusHistoryFrom", fields: [fromStatusId], references: [id], onDelete: SetNull)
+  toStatus         CandidateStatus  @relation("StatusHistoryTo", fields: [toStatusId], references: [id], onDelete: Restrict)
+  changedBy        User             @relation(fields: [changedById], references: [id], onDelete: Restrict)
+
+  @@index([chapterId, recruitmentCycleId, createdAt])
+  @@index([candidateId, createdAt])
+}
+
+model Comment {
+  id                 String       @id @default(cuid())
+  chapterId          String
+  recruitmentCycleId String
+  candidateId        String
+  userId             String
+  parentId           String?
+  body               String
+  state              CommentState @default(VISIBLE)
+  moderatedAt        DateTime?
+  moderatedById      String?
+  moderationReason   String?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  chapter          Chapter          @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  recruitmentCycle RecruitmentCycle @relation(fields: [recruitmentCycleId], references: [id], onDelete: Cascade)
+  candidate        Candidate        @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  user             User             @relation("CommentAuthor", fields: [userId], references: [id], onDelete: Cascade)
+  moderatedBy      User?            @relation("CommentModerator", fields: [moderatedById], references: [id], onDelete: SetNull)
+  parent           Comment?         @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies          Comment[]        @relation("CommentReplies")
+  reactions        CommentReaction[]
+  reports          ModerationReport[]
+
+  @@index([chapterId, candidateId, createdAt])
+  @@index([parentId])
+}
+
+model CommentReaction {
+  id                 String   @id @default(cuid())
+  chapterId          String
+  recruitmentCycleId String
+  commentId          String
+  userId             String
+  emoji              String
+  createdAt          DateTime @default(now())
+
+  chapter          Chapter          @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  recruitmentCycle RecruitmentCycle @relation(fields: [recruitmentCycleId], references: [id], onDelete: Cascade)
+  comment          Comment          @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([commentId, userId, emoji])
+  @@index([chapterId, commentId])
+}
+
+model ModerationReport {
+  id                 String                   @id @default(cuid())
+  chapterId          String
+  recruitmentCycleId String
+  commentId          String
+  reportedById       String
+  reason             ModerationReportReason
+  details            String?
+  status             ModerationReportStatus   @default(PENDING)
+  reviewedById       String?
+  reviewedAt         DateTime?
+  resolutionNote     String?
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
+
+  chapter          Chapter          @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  recruitmentCycle RecruitmentCycle @relation(fields: [recruitmentCycleId], references: [id], onDelete: Cascade)
+  comment          Comment          @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  reportedBy       User             @relation("ReportAuthor", fields: [reportedById], references: [id], onDelete: Cascade)
+  reviewedBy       User?            @relation("ReportReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([chapterId, status, createdAt])
+  @@index([commentId])
+}
+
+model AuditLog {
+  id         String      @id @default(cuid())
+  chapterId  String
+  actorId    String
+  action     AuditAction
+  targetType String
+  targetId   String
+  metadata   Json?
+  createdAt  DateTime    @default(now())
+
+  chapter Chapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  actor   User    @relation(fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([chapterId, createdAt])
+  @@index([chapterId, action])
+}
+
+model ChapterSubscription {
+  id                     String             @id @default(cuid())
+  chapterId              String
+  term                   SubscriptionTerm
+  status                 SubscriptionStatus @default(TRIAL)
+  periodStart            DateTime
+  periodEnd              DateTime
+  provider               String?
+  providerCustomerId     String?
+  providerSubscriptionId String?
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+
+  chapter Chapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+
+  @@index([chapterId, status, periodEnd])
+}
