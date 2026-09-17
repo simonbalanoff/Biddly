@@ -143,12 +143,14 @@ function MemberCandidatesPage() {
 
 function MemberCandidateCard({ candidate, ratingOptions, ratingBusy, scoreMax, onRate }: { candidate: Candidate; ratingOptions: Array<{ value: string; label: string }>; ratingBusy: boolean; scoreMax: number; onRate: (candidate: Candidate, value: string) => Promise<void> }) {
   return <article className="member-pnm-card">
-    <div className="member-pnm-photo">
-      {candidate.photoUrl ? <img src={candidate.photoUrl} alt={`${candidate.firstName} ${candidate.lastName}`} /> : <div className="member-pnm-photo-fallback"><span>{candidate.firstName[0]}{candidate.lastName[0]}</span><small>No photo</small></div>}
-      <div className="member-pnm-status"><StatusDot color={candidate.status.color} /><span>{candidate.status.name}</span></div>
-    </div>
+    <Link className="member-pnm-card-link" href={`/candidates/${candidate.id}`} aria-label={`View ${candidate.firstName} ${candidate.lastName}`}>
+      <div className="member-pnm-photo">
+        {candidate.photoUrl ? <img src={candidate.photoUrl} alt={`${candidate.firstName} ${candidate.lastName}`} /> : <div className="member-pnm-photo-fallback"><span>{candidate.firstName[0]}{candidate.lastName[0]}</span><small>No photo</small></div>}
+        <div className="member-pnm-status"><StatusDot color={candidate.status.color} /><span>{candidate.status.name}</span></div>
+      </div>
+      <div className="member-pnm-card-title"><h2>{candidate.firstName} {candidate.lastName}</h2><span>View profile <Icon name="chevron" size={14} /></span></div>
+    </Link>
     <div className="member-pnm-card-body">
-      <h2>{candidate.firstName} {candidate.lastName}</h2>
       <div className="member-rating-row"><div><span>Your rating</span>{candidate.myEvaluation ? <small>{formatMemberScore(candidate.myEvaluation.score)} / {formatMemberScore(scoreMax)}</small> : <small>Not rated yet</small>}</div><Select compact className="member-rating-select" value={candidate.myEvaluation ? String(candidate.myEvaluation.score) : ""} onChange={(next) => void onRate(candidate, next)} placeholder={ratingBusy ? "Saving…" : "Rate"} disabled={ratingBusy} options={ratingOptions} ariaLabel={`Rate ${candidate.firstName} ${candidate.lastName}`} /></div>
     </div>
   </article>;
@@ -156,8 +158,11 @@ function MemberCandidateCard({ candidate, ratingOptions, ratingBusy, scoreMax, o
 
 function MemberCandidateRow({ candidate, ratingOptions, ratingBusy, scoreMax, onRate }: { candidate: Candidate; ratingOptions: Array<{ value: string; label: string }>; ratingBusy: boolean; scoreMax: number; onRate: (candidate: Candidate, value: string) => Promise<void> }) {
   return <article className="member-pnm-row">
-    <div className="member-pnm-row-photo">{candidate.photoUrl ? <img src={candidate.photoUrl} alt={`${candidate.firstName} ${candidate.lastName}`} /> : <span>{candidate.firstName[0]}{candidate.lastName[0]}</span>}</div>
-    <div className="member-pnm-row-copy"><strong>{candidate.firstName} {candidate.lastName}</strong><span><StatusDot color={candidate.status.color} />{candidate.status.name}</span></div>
+    <Link className="member-pnm-row-link" href={`/candidates/${candidate.id}`} aria-label={`View ${candidate.firstName} ${candidate.lastName}`}>
+      <div className="member-pnm-row-photo">{candidate.photoUrl ? <img src={candidate.photoUrl} alt={`${candidate.firstName} ${candidate.lastName}`} /> : <span>{candidate.firstName[0]}{candidate.lastName[0]}</span>}</div>
+      <div className="member-pnm-row-copy"><strong>{candidate.firstName} {candidate.lastName}</strong><span><StatusDot color={candidate.status.color} />{candidate.status.name}</span></div>
+      <Icon name="chevron" size={16} />
+    </Link>
     <div className="member-pnm-row-rating"><div><span>Your rating</span><small>{candidate.myEvaluation ? `${formatMemberScore(candidate.myEvaluation.score)} / ${formatMemberScore(scoreMax)}` : "Not rated"}</small></div><Select compact className="member-rating-select" value={candidate.myEvaluation ? String(candidate.myEvaluation.score) : ""} onChange={(next) => void onRate(candidate, next)} placeholder={ratingBusy ? "Saving…" : "Rate"} disabled={ratingBusy} options={ratingOptions} ariaLabel={`Rate ${candidate.firstName} ${candidate.lastName}`} /></div>
   </article>;
 }

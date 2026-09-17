@@ -9,7 +9,7 @@
   padding: 20px 22px;
   margin-bottom: 14px;
   border: 1px solid #e4e7ec;
-  border-left: 4px solid var(--workspace-primary);
+  border-left: 1px solid #e4e7ec;
   border-radius: 10px;
   background: #fff;
 }
@@ -948,7 +948,7 @@
   padding: 24px 26px;
   margin-bottom: 22px;
   border-color: #d8e1eb;
-  border-left-width: 5px;
+  border-left-width: 1px;
   border-radius: 14px;
   background: linear-gradient(135deg, #ffffff 0%, #fbfcfe 72%, color-mix(in srgb, var(--workspace-primary) 4%, #ffffff) 100%);
   box-shadow: 0 1px 2px rgba(16, 24, 40, .04), 0 8px 24px rgba(16, 24, 40, .04);
@@ -1669,4 +1669,9 @@
 .rowActions :global(.button):focus-visible {
   outline: 2px solid color-mix(in srgb, var(--chapter-primary) 60%, #2563eb);
   outline-offset: 2px;
+}
+
+.identityCard {
+  border-left-width: 1px;
+  border-top: 3px solid var(--workspace-primary);
 }

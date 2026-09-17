@@ -18,7 +18,7 @@ const primaryNav = [
 
 const adminNav = [
   { href: "/moderation", label: "Moderation", icon: "shield" as const, roles: ["MODERATOR", "CHAPTER_ADMIN"] as Role[] },
-  { href: "/data", label: "Import & export", icon: "data" as const, roles: ["CHAPTER_ADMIN"] as Role[] },
+  { href: "/data", label: "Data", icon: "data" as const, roles: ["CHAPTER_ADMIN"] as Role[] },
   { href: "/billing", label: "Billing", icon: "billing" as const, roles: ["CHAPTER_ADMIN"] as Role[] },
   { href: "/settings", label: "Settings", icon: "settings" as const, roles: ["CHAPTER_ADMIN"] as Role[] }
 ];
@@ -65,16 +65,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     const branding = chapter?.branding;
     return {
       "--chapter-primary": branding?.primaryColor || organization?.primaryColor || "#2563eb",
-      "--chapter-secondary": branding?.secondaryColor || organization?.secondaryColor || "#ffffff",
-      "--chapter-accent": branding?.accentColor || organization?.accentColor || branding?.primaryColor || organization?.primaryColor || "#2563eb"
+      "--chapter-secondary": branding?.secondaryColor || organization?.secondaryColor || "#ffffff"
     } as React.CSSProperties;
   }, [chapter]);
 
+  const memberRouteAllowed = pathname === "/candidates" || pathname.startsWith("/candidates/");
+
   useEffect(() => {
-    if (!loading && signedIn && memberMode && pathname !== "/candidates") {
+    if (!loading && signedIn && memberMode && !memberRouteAllowed) {
       router.replace("/candidates");
     }
-  }, [loading, memberMode, pathname, router, signedIn]);
+  }, [loading, memberMode, memberRouteAllowed, router, signedIn]);
 
   if (loading || (!signedIn && !context)) {
     return <div className="app-loading"><Brand /><Spinner size={28} /></div>;
@@ -95,7 +96,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const billingPath = pathname === "/billing" || pathname.startsWith("/billing/");
 
   if (memberMode) {
-    const redirecting = pathname !== "/candidates";
+    const redirecting = !memberRouteAllowed;
     return (
       <div className="member-app-frame" style={theme}>
         <a className="skip-link" href="#main-content">Skip to content</a>
@@ -142,13 +143,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         ) : <div className="platform-label"><div className="platform-label-icon"><Icon name="shield" size={17} /></div><div><span>Biddly admin</span><strong>Platform operations</strong></div></div>}
 
-        {visiblePrimary.length ? <nav className="sidebar-nav">
+        {visiblePrimary.length ? <div className="sidebar-nav-group"><div className="sidebar-section-label">Workspace</div><nav className="sidebar-nav">
           {visiblePrimary.map((item) => <Link key={item.href} href={item.href} aria-current={isActive(pathname, item.href) ? "page" : undefined} className={`nav-link ${isActive(pathname, item.href) ? "nav-link-active" : ""}`}><Icon name={item.icon} /><span>{item.label}</span></Link>)}
-        </nav> : null}
+        </nav></div> : null}
 
         {platformAdmin ? <div className="sidebar-platform-group"><div className="sidebar-section-label">Administration</div><Link href="/platform" aria-current={isActive(pathname, "/platform") && !pathname.startsWith("/platform/billing") && !pathname.startsWith("/platform/storage") && !pathname.startsWith("/platform/system") ? "page" : undefined} className={`nav-link ${isActive(pathname, "/platform") && !pathname.startsWith("/platform/billing") && !pathname.startsWith("/platform/storage") && !pathname.startsWith("/platform/system") ? "nav-link-active" : ""}`}><Icon name="shield" /><span>Platform</span></Link><Link href="/platform/billing" aria-current={isActive(pathname, "/platform/billing") ? "page" : undefined} className={`nav-link ${isActive(pathname, "/platform/billing") ? "nav-link-active" : ""}`}><Icon name="billing" /><span>Billing</span></Link><Link href="/platform/storage" aria-current={isActive(pathname, "/platform/storage") ? "page" : undefined} className={`nav-link ${isActive(pathname, "/platform/storage") ? "nav-link-active" : ""}`}><Icon name="storage" /><span>Storage</span></Link><Link href="/platform/system" aria-current={isActive(pathname, "/platform/system") ? "page" : undefined} className={`nav-link ${isActive(pathname, "/platform/system") ? "nav-link-active" : ""}`}><Icon name="activity" /><span>System</span></Link></div> : null}
 
-        {visibleAdmin.length ? <div className="sidebar-secondary"><div className="sidebar-section-label">Workspace</div>{visibleAdmin.map((item) => <Link key={item.href} href={item.href} aria-current={isActive(pathname, item.href) ? "page" : undefined} className={`nav-link ${isActive(pathname, item.href) ? "nav-link-active" : ""}`}><Icon name={item.icon} /><span>{item.label}</span></Link>)}</div> : null}
+        {visibleAdmin.length ? <div className="sidebar-secondary"><div className="sidebar-section-label">Manage</div>{visibleAdmin.map((item) => <Link key={item.href} href={item.href} aria-current={isActive(pathname, item.href) ? "page" : undefined} className={`nav-link ${isActive(pathname, item.href) ? "nav-link-active" : ""}`}><Icon name={item.icon} /><span>{item.label}</span></Link>)}</div> : null}
 
         <div className="sidebar-user">
           <Avatar firstName={context.user.firstName} lastName={context.user.lastName} />

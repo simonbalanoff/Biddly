@@ -308,6 +308,11 @@ export async function candidateRoutes(app: FastifyInstance) {
 
     return {
       ...candidate,
+      email: user.chapterRole === "MEMBER" ? undefined : candidate.email,
+      phone: user.chapterRole === "MEMBER" ? undefined : candidate.phone,
+      aggregate: user.chapterRole === "MEMBER" ? undefined : candidate.aggregate,
+      statusHistory: user.chapterRole === "MEMBER" ? undefined : candidate.statusHistory,
+      createdById: user.chapterRole === "MEMBER" ? undefined : candidate.createdById,
       myEvaluation: candidate.evaluations[0] ?? null,
       evaluations: undefined,
       hasPhoto: Boolean(candidate.photoKey),

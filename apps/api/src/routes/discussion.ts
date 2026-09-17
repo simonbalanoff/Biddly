@@ -42,11 +42,21 @@ export async function discussionRoutes(app: FastifyInstance) {
 
     const candidate = await prisma.candidate.findFirst({
       where: { id: candidateId, chapterId: user.chapterId },
-      select: { id: true }
+      select: { id: true, recruitmentCycleId: true, archivedAt: true }
     });
 
     if (!candidate) {
       return reply.code(404).send({ error: "Candidate not found" });
+    }
+
+    if (user.chapterRole === "MEMBER") {
+      const chapter = await prisma.chapter.findUnique({
+        where: { id: user.chapterId },
+        select: { activeRecruitmentCycleId: true }
+      });
+      if (candidate.archivedAt || candidate.recruitmentCycleId !== chapter?.activeRecruitmentCycleId) {
+        return reply.code(403).send({ error: "Archived candidate access requires moderator permissions" });
+      }
     }
 
     const comments = await prisma.comment.findMany({
@@ -80,7 +90,7 @@ export async function discussionRoutes(app: FastifyInstance) {
     const moderator = canModerate(user.chapterRole);
     const serialized = comments.map((comment) => ({
       ...serializeComment(comment, moderator),
-      authorScore: scoresByUserId.get(comment.userId) ?? null,
+      authorScore: user.chapterRole === "MEMBER" ? null : scoresByUserId.get(comment.userId) ?? null,
       replies: [] as any[]
     }));
     const byId = new Map(serialized.map((comment) => [comment.id, comment]));
@@ -119,6 +129,16 @@ export async function discussionRoutes(app: FastifyInstance) {
 
     if (!candidate) {
       return reply.code(404).send({ error: "Candidate not found" });
+    }
+
+    if (user.chapterRole === "MEMBER") {
+      const chapter = await prisma.chapter.findUnique({
+        where: { id: user.chapterId },
+        select: { activeRecruitmentCycleId: true }
+      });
+      if (candidate.recruitmentCycleId !== chapter?.activeRecruitmentCycleId) {
+        return reply.code(403).send({ error: "Archived candidate access requires moderator permissions" });
+      }
     }
 
     if (settings && !settings.commentsEnabled) {

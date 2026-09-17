@@ -63,13 +63,9 @@ export default function CandidateDetailPage() {
   };
 
   useEffect(() => {
-    if (memberMode) router.replace("/candidates");
-  }, [memberMode, router]);
-
-  useEffect(() => {
-    if (!context || memberMode) return;
+    if (!context) return;
     void load();
-  }, [candidateId, context?.membership?.role, memberMode]);
+  }, [candidateId, context?.membership?.role]);
 
   const scoreMin = settings?.scoreMin ?? 1;
   const scoreMax = settings?.scoreMax ?? 10;
@@ -118,8 +114,50 @@ export default function CandidateDetailPage() {
     }
   };
 
-  if (memberMode || loading) return <AppShell><div className="detail-loading"><Spinner /><span>{memberMode ? "Back to PNMs…" : "Loading PNM…"}</span></div></AppShell>;
+  if (loading) return <AppShell><div className="detail-loading"><Spinner /><span>Loading PNM…</span></div></AppShell>;
   if (!candidate) return <AppShell><div className="panel panel-spacious"><EmptyState title="PNM unavailable" copy={error || "This record could not be loaded."} action={<Link href="/candidates" className="button button-secondary button-md">Back to PNMs</Link>} /></div></AppShell>;
+
+  if (memberMode) {
+    const profileItems = (candidate.customValues ?? []).filter((item) => formatCustomValue(item.value) !== "Not provided");
+    return (
+      <AppShell>
+        <div className="member-detail-page">
+          <Link href="/candidates" className="member-detail-back"><Icon name="chevron" size={15} /><span>Back to PNMs</span></Link>
+
+          <section className="member-detail-hero">
+            <div className="member-detail-photo">{photoUrl ? <img src={photoUrl} alt={`${candidate.firstName} ${candidate.lastName}`} /> : <span>{candidate.firstName[0]}{candidate.lastName[0]}</span>}</div>
+            <div className="member-detail-identity">
+              <div className="member-detail-status"><StatusDot color={candidate.status.color} /><span>{candidate.status.name}</span></div>
+              <h1>{candidate.firstName} {candidate.lastName}</h1>
+              <p>Review their profile, add your rating, and share useful recruitment context with the chapter.</p>
+            </div>
+          </section>
+
+          {error ? <div className="form-alert form-alert-error member-pnm-alert">{error}<button type="button" onClick={() => setError("")}>Dismiss</button></div> : null}
+
+          <div className="member-detail-layout">
+            <div className="member-detail-main">
+              <section className="panel member-profile-panel">
+                <div className="panel-header"><div><span className="section-kicker">Profile</span><h2>About {candidate.firstName}</h2></div></div>
+                {profileItems.length ? <div className="member-profile-grid">{profileItems.map((item) => <ProfileItem key={item.id} label={item.field.label} value={formatCustomValue(item.value)} wide={item.field.type === "LONG_TEXT"} />)}</div> : <div className="member-profile-empty">No additional profile information has been added yet.</div>}
+              </section>
+
+              {settings?.commentsEnabled ? <Discussion candidateId={candidateId} comments={comments} setComments={setComments} repliesEnabled={Boolean(settings.repliesEnabled)} reactionsEnabled={Boolean(settings.reactionsEnabled)} canModerate={false} currentUserId={context.user.id} readOnly={readOnly} scoreMax={scoreMax} showAuthorScores={false} /> : <section className="panel"><EmptyState icon="message" title="Discussion is turned off" copy="Your chapter has disabled PNM comments for this recruitment cycle." /></section>}
+            </div>
+
+            <aside className="member-detail-side">
+              <section className="panel member-rating-panel">
+                <div className="member-rating-panel-heading"><span>Your rating</span><strong>{score !== null ? `${formatScore(score)} / ${formatScore(scoreMax)}` : "Not rated"}</strong></div>
+                {possibleScores.length ? <div className="member-detail-score-buttons">{possibleScores.map((value) => <button type="button" key={value} disabled={scoreBusy} onClick={() => void saveScore(value)} className={score === value ? "score-button score-button-active" : "score-button"}>{formatScore(value)}</button>)}</div> : <div className="score-slider-wrap"><input type="range" min={scoreMin} max={scoreMax} step={scoreStep} value={score ?? scoreMin} onChange={(event) => setScore(Number(event.target.value))} onPointerUp={() => { if (score !== null) void saveScore(score); }} onKeyUp={() => { if (score !== null) void saveScore(score); }} /><strong>{score ?? "—"}</strong></div>}
+                <div className="member-rating-panel-footer">{scoreBusy ? <><Spinner size={13} /><span>Saving rating…</span></> : score !== null ? <><Icon name="check" size={14} /><span>Your rating is saved</span></> : <span>Select a score to rate this PNM</span>}</div>
+              </section>
+              <div className="member-detail-note"><Icon name="message" size={17} /><div><strong>Keep the conversation useful</strong><span>Share specific interactions or context that helps the chapter make a better recruitment decision.</span></div></div>
+            </aside>
+          </div>
+        </div>
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell>
@@ -142,7 +180,7 @@ export default function CandidateDetailPage() {
         <div className="candidate-detail-main">
           <section className="panel score-panel">
             <div className="panel-header"><div><span className="section-kicker">Your evaluation</span><h2>{readOnly ? "Your submitted score" : "Score this PNM"}</h2></div>{!readOnly && scoreBusy ? <span className="saving-text"><Spinner size={14} /> Saving</span> : !readOnly && candidate.myEvaluation ? <span className="saved-text">Saved</span> : null}</div>
-            {readOnly ? <div className="historical-score"><strong>{candidate.myEvaluation?.score ?? "—"}</strong><span>out of {scoreMax}</span></div> : possibleScores.length ? <div className="score-buttons">{possibleScores.map((value) => <button type="button" key={value} onClick={() => void saveScore(value)} className={score === value ? "score-button score-button-active" : "score-button"}>{value}</button>)}</div> : <div className="score-slider-wrap"><input type="range" min={scoreMin} max={scoreMax} step={scoreStep} value={score ?? scoreMin} onChange={(event) => setScore(Number(event.target.value))} onMouseUp={() => { if (score !== null) void saveScore(score); }} /><strong>{score ?? "—"}</strong></div>}
+            {readOnly ? <div className="historical-score"><strong>{candidate.myEvaluation?.score ?? "—"}</strong><span>out of {scoreMax}</span></div> : possibleScores.length ? <div className="score-buttons">{possibleScores.map((value) => <button type="button" key={value} onClick={() => void saveScore(value)} className={score === value ? "score-button score-button-active" : "score-button"}>{value}</button>)}</div> : <div className="score-slider-wrap"><input type="range" min={scoreMin} max={scoreMax} step={scoreStep} value={score ?? scoreMin} onChange={(event) => setScore(Number(event.target.value))} onPointerUp={() => { if (score !== null) void saveScore(score); }} onKeyUp={() => { if (score !== null) void saveScore(score); }} /><strong>{score ?? "—"}</strong></div>}
             {!readOnly ? <div className="score-help"><span>{scoreMin} = lowest</span><span>{scoreMax} = highest</span></div> : null}
           </section>
 
@@ -157,7 +195,7 @@ export default function CandidateDetailPage() {
             </div>
           </section>
 
-          {settings?.commentsEnabled || canManage ? <Discussion candidateId={candidateId} comments={comments} setComments={setComments} repliesEnabled={Boolean(settings?.repliesEnabled)} reactionsEnabled={Boolean(settings?.reactionsEnabled)} canModerate={canManage} currentUserId={context?.user.id ?? ""} readOnly={readOnly} scoreMax={scoreMax} /> : <section className="panel"><EmptyState icon="message" title="Discussion is turned off" copy="Your chapter has disabled PNM comments for this recruitment cycle." /></section>}
+          {settings?.commentsEnabled || canManage ? <Discussion candidateId={candidateId} comments={comments} setComments={setComments} repliesEnabled={Boolean(settings?.repliesEnabled)} reactionsEnabled={Boolean(settings?.reactionsEnabled)} canModerate={canManage} currentUserId={context?.user.id ?? ""} readOnly={readOnly} scoreMax={scoreMax} showAuthorScores /> : <section className="panel"><EmptyState icon="message" title="Discussion is turned off" copy="Your chapter has disabled PNM comments for this recruitment cycle." /></section>}
         </div>
 
         <aside className="candidate-detail-side">
@@ -180,7 +218,7 @@ function ProfileItem({ label, value, wide = false }: { label: string; value: str
   return <div className={`profile-item ${wide ? "profile-item-wide" : ""}`}><span>{label}</span><strong>{value}</strong></div>;
 }
 
-function Discussion({ candidateId, comments, setComments, repliesEnabled, reactionsEnabled, canModerate, currentUserId, readOnly, scoreMax }: { candidateId: string; comments: CandidateComment[]; setComments: (comments: CandidateComment[]) => void; repliesEnabled: boolean; reactionsEnabled: boolean; canModerate: boolean; currentUserId: string; readOnly: boolean; scoreMax: number }) {
+function Discussion({ candidateId, comments, setComments, repliesEnabled, reactionsEnabled, canModerate, currentUserId, readOnly, scoreMax, showAuthorScores }: { candidateId: string; comments: CandidateComment[]; setComments: (comments: CandidateComment[]) => void; repliesEnabled: boolean; reactionsEnabled: boolean; canModerate: boolean; currentUserId: string; readOnly: boolean; scoreMax: number; showAuthorScores: boolean }) {
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -264,6 +302,7 @@ function Discussion({ candidateId, comments, setComments, repliesEnabled, reacti
               onDelete={remove}
               onModerate={moderate}
               scoreMax={scoreMax}
+              showAuthorScores={showAuthorScores}
             />
           ))}
         </div>
@@ -276,7 +315,7 @@ function Discussion({ candidateId, comments, setComments, repliesEnabled, reacti
 
 const REACTION_CHOICES = ["👍", "❤️", "😂", "🔥", "💯", "👀", "🎉", "🙌", "🤝", "✅", "🤔", "⭐", "🚩", "😬", "👏", "💜"];
 
-function CommentThread({ comment, depth, repliesEnabled, reactionsEnabled, canModerate, currentUserId, onReply, onReact, onDelete, onModerate, scoreMax }: { comment: CandidateComment; depth: number; repliesEnabled: boolean; reactionsEnabled: boolean; canModerate: boolean; currentUserId: string; onReply: (parentId: string, body: string) => Promise<void>; onReact: (commentId: string, emoji: string, active: boolean) => Promise<void>; onDelete: (commentId: string) => Promise<void>; onModerate: (commentId: string, action: "HIDE" | "RESTORE" | "REMOVE") => Promise<void>; scoreMax: number }) {
+function CommentThread({ comment, depth, repliesEnabled, reactionsEnabled, canModerate, currentUserId, onReply, onReact, onDelete, onModerate, scoreMax, showAuthorScores }: { comment: CandidateComment; depth: number; repliesEnabled: boolean; reactionsEnabled: boolean; canModerate: boolean; currentUserId: string; onReply: (parentId: string, body: string) => Promise<void>; onReact: (commentId: string, emoji: string, active: boolean) => Promise<void>; onDelete: (commentId: string) => Promise<void>; onModerate: (commentId: string, action: "HIDE" | "RESTORE" | "REMOVE") => Promise<void>; scoreMax: number; showAuthorScores: boolean }) {
   const [replyOpen, setReplyOpen] = useState(false);
   const [replyBody, setReplyBody] = useState("");
   const [replyBusy, setReplyBusy] = useState(false);
@@ -362,7 +401,7 @@ function CommentThread({ comment, depth, repliesEnabled, reactionsEnabled, canMo
         <div className="comment-content">
           <div className="comment-header">
             <strong>{comment.user.firstName} {comment.user.lastName}</strong>
-            {comment.authorScore !== null && comment.authorScore !== undefined ? <span className={threadStyles.authorScore}>Rated {formatScore(comment.authorScore)} / {formatScore(scoreMax)}</span> : null}
+            {showAuthorScores && comment.authorScore !== null && comment.authorScore !== undefined ? <span className={threadStyles.authorScore}>Rated {formatScore(comment.authorScore)} / {formatScore(scoreMax)}</span> : null}
             <span>{timeAgo(comment.createdAt)}</span>
             {!isVisible ? <Badge tone="warning">{comment.state.toLowerCase()}</Badge> : null}
           </div>
@@ -452,6 +491,7 @@ function CommentThread({ comment, depth, repliesEnabled, reactionsEnabled, canMo
               onDelete={onDelete}
               onModerate={onModerate}
               scoreMax={scoreMax}
+              showAuthorScores={showAuthorScores}
             />
           ))}
         </div>
