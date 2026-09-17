@@ -11,6 +11,7 @@ import { prisma } from "@biddly/db";
 import { FastifyInstance } from "fastify";
 import { writeAudit } from "../lib/audit.js";
 import { env } from "../lib/env.js";
+import { sendEmail } from "../lib/email.js";
 import { normalizePhone } from "../lib/phone.js";
 import { createUniqueChapterSlug } from "../lib/slug.js";
 import {
@@ -19,6 +20,7 @@ import {
     rotateRefreshToken,
 } from "../lib/sessions.js";
 import { createOpaqueToken, hashToken } from "../lib/tokens.js";
+import { chapterHasActiveSubscription } from "../lib/subscription-access.js";
 
 export async function authRoutes(app: FastifyInstance) {
     app.post(
@@ -312,10 +314,11 @@ export async function authRoutes(app: FastifyInstance) {
                                 accentColor: true,
                                 logoUrl: true,
                                 crestUrl: true,
+                                isActive: true,
                             },
                         },
                         university: {
-                            select: { id: true, name: true, shortName: true },
+                            select: { id: true, name: true, shortName: true, isActive: true },
                         },
                         branding: {
                             select: {
@@ -335,6 +338,24 @@ export async function authRoutes(app: FastifyInstance) {
             return reply
                 .code(404)
                 .send({ error: "Invite is invalid or expired" });
+        }
+
+        if (
+            !invite.chapter.isActive ||
+            !invite.chapter.organization.isActive ||
+            !invite.chapter.university.isActive
+        ) {
+            return reply
+                .code(404)
+                .send({ error: "Invite is unavailable while this workspace is suspended" });
+        }
+
+        const subscriptionActive = await chapterHasActiveSubscription(invite.chapterId);
+        if (!subscriptionActive) {
+            return reply.code(402).send({
+                error: "This workspace needs an active Biddly subscription before new members can join.",
+                code: "SUBSCRIPTION_REQUIRED",
+            });
         }
 
         const expired = Boolean(
@@ -382,12 +403,38 @@ export async function authRoutes(app: FastifyInstance) {
 
         const invite = await prisma.chapterInvite.findUnique({
             where: { tokenHash: hashToken(parsed.data.token) },
+            include: {
+                chapter: {
+                    include: {
+                        organization: { select: { isActive: true } },
+                        university: { select: { isActive: true } },
+                    },
+                },
+            },
         });
 
         if (!invite) {
             return reply
                 .code(404)
                 .send({ error: "Invite is invalid or expired" });
+        }
+
+        if (
+            !invite.chapter.isActive ||
+            !invite.chapter.organization.isActive ||
+            !invite.chapter.university.isActive
+        ) {
+            return reply
+                .code(404)
+                .send({ error: "Invite is unavailable while this workspace is suspended" });
+        }
+
+        const subscriptionActive = await chapterHasActiveSubscription(invite.chapterId);
+        if (!subscriptionActive) {
+            return reply.code(402).send({
+                error: "This workspace needs an active Biddly subscription before new members can join.",
+                code: "SUBSCRIPTION_REQUIRED",
+            });
         }
 
         const expired = Boolean(
@@ -445,10 +492,35 @@ export async function authRoutes(app: FastifyInstance) {
         const user = await prisma.$transaction(async (tx) => {
             const currentInvite = await tx.chapterInvite.findUnique({
                 where: { id: invite.id },
+                include: {
+                    chapter: {
+                        include: {
+                            organization: { select: { isActive: true } },
+                            university: { select: { isActive: true } },
+                        },
+                    },
+                },
             });
+
+            const activeSubscription = currentInvite
+                ? await tx.chapterSubscription.findFirst({
+                      where: {
+                          chapterId: currentInvite.chapterId,
+                          provider: "stripe",
+                          providerSubscriptionId: { not: null },
+                          status: { in: ["ACTIVE", "TRIAL"] },
+                          periodEnd: { gt: new Date() },
+                      },
+                      select: { id: true },
+                  })
+                : null;
 
             if (
                 !currentInvite ||
+                !currentInvite.chapter.isActive ||
+                !currentInvite.chapter.organization.isActive ||
+                !currentInvite.chapter.university.isActive ||
+                !activeSubscription ||
                 currentInvite.revokedAt ||
                 (currentInvite.expiresAt &&
                     currentInvite.expiresAt <= new Date()) ||
@@ -540,8 +612,18 @@ export async function authRoutes(app: FastifyInstance) {
                     }),
                 ]);
 
-                if (env.NODE_ENV !== "production") {
-                    debugResetUrl = `${env.APP_BASE_URL}/reset-password?token=${encodeURIComponent(token)}`;
+                const resetUrl = `${env.APP_BASE_URL}/reset-password?token=${encodeURIComponent(token)}`;
+                const delivery = await sendEmail({
+                    to: user.email,
+                    subject: "Reset your Biddly password",
+                    title: "Reset your password",
+                    copy: `Use this secure link to reset your Biddly password. The link expires in ${env.PASSWORD_RESET_MINUTES} minutes.`,
+                    actionLabel: "Reset password",
+                    actionUrl: resetUrl
+                });
+
+                if (!delivery.sent && env.NODE_ENV !== "production") {
+                    debugResetUrl = resetUrl;
                 }
             }
 

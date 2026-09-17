@@ -9,7 +9,7 @@ import {
   updateCandidateFieldSchema,
   updateRecruitmentCycleSchema
 } from "@biddly/contracts";
-import { prisma } from "@biddly/db";
+import { Prisma, prisma } from "@biddly/db";
 import { FastifyInstance } from "fastify";
 import { writeAudit } from "../lib/audit.js";
 import { requireChapterRole } from "../lib/permissions.js";
@@ -125,7 +125,10 @@ export async function recruitmentCycleRoutes(app: FastifyInstance) {
     const cycle = await prisma.recruitmentCycle.findFirst({
       where: { id: cycleId, chapterId: user.chapterId },
       include: {
-        statuses: { orderBy: { position: "asc" } },
+        statuses: {
+          orderBy: { position: "asc" },
+          include: { _count: { select: { candidates: true, historyTo: true } } }
+        },
         fieldDefinitions: { orderBy: { position: "asc" } },
         publicForm: true,
         _count: { select: { candidates: true, evaluations: true, comments: true } }
@@ -415,7 +418,7 @@ export async function recruitmentCycleRoutes(app: FastifyInstance) {
 
       const status = await prisma.candidateStatus.findFirst({
         where: { id: statusId, recruitmentCycleId: cycleId, recruitmentCycle: { chapterId: user.chapterId } },
-        include: { _count: { select: { candidates: true } } }
+        include: { _count: { select: { candidates: true, historyTo: true } } }
       });
 
       if (!status) {
@@ -423,7 +426,10 @@ export async function recruitmentCycleRoutes(app: FastifyInstance) {
       }
 
       if (status._count.candidates > 0) {
-        return reply.code(409).send({ error: "Move candidates out of this status before deleting it" });
+        const noun = status._count.candidates === 1 ? "PNM is" : "PNMs are";
+        return reply.code(409).send({
+          error: `${status._count.candidates} ${noun} still assigned to this status. Move them to another status before removing it.`
+        });
       }
 
       const count = await prisma.candidateStatus.count({ where: { recruitmentCycleId: cycleId } });
@@ -431,33 +437,42 @@ export async function recruitmentCycleRoutes(app: FastifyInstance) {
         return reply.code(409).send({ error: "A recruitment cycle must have at least one status" });
       }
 
-      await prisma.$transaction(async (tx) => {
-        await tx.candidateStatus.delete({ where: { id: statusId } });
-        const remaining = await tx.candidateStatus.findMany({
-          where: { recruitmentCycleId: cycleId },
-          orderBy: { position: "asc" }
+      try {
+        await prisma.$transaction(async (tx) => {
+          await tx.candidateStatus.delete({ where: { id: statusId } });
+          const remaining = await tx.candidateStatus.findMany({
+            where: { recruitmentCycleId: cycleId },
+            orderBy: { position: "asc" }
+          });
+          for (let index = 0; index < remaining.length; index += 1) {
+            await tx.candidateStatus.update({
+              where: { id: remaining[index].id },
+              data: { position: 1000 + index }
+            });
+          }
+          for (let index = 0; index < remaining.length; index += 1) {
+            await tx.candidateStatus.update({
+              where: { id: remaining[index].id },
+              data: { position: index }
+            });
+          }
+          await writeAudit(tx, {
+            chapterId: user.chapterId!,
+            actorId: user.id,
+            action: "STATUS_DELETED",
+            targetType: "CandidateStatus",
+            targetId: statusId,
+            metadata: { cycleId, name: status.name, historyReferences: status._count.historyTo }
+          });
         });
-        for (let index = 0; index < remaining.length; index += 1) {
-          await tx.candidateStatus.update({
-            where: { id: remaining[index].id },
-            data: { position: 1000 + index }
+      } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && ["P2003", "P2014"].includes(error.code)) {
+          return reply.code(409).send({
+            error: "This status is still assigned to recruitment data. Move any current PNMs to another status and try again."
           });
         }
-        for (let index = 0; index < remaining.length; index += 1) {
-          await tx.candidateStatus.update({
-            where: { id: remaining[index].id },
-            data: { position: index }
-          });
-        }
-        await writeAudit(tx, {
-          chapterId: user.chapterId!,
-          actorId: user.id,
-          action: "STATUS_DELETED",
-          targetType: "CandidateStatus",
-          targetId: statusId,
-          metadata: { cycleId, name: status.name }
-        });
-      });
+        throw error;
+      }
 
       return reply.code(204).send();
     }
@@ -540,7 +555,7 @@ export async function recruitmentCycleRoutes(app: FastifyInstance) {
               visibleOnPublicForm: parsed.data.visibleOnPublicForm,
               position: (maxPosition._max.position ?? -1) + 1,
               options: parsed.data.options ?? undefined,
-              validation: parsed.data.validation ?? undefined
+              validation: parsed.data.validation == null ? undefined : (parsed.data.validation as Prisma.InputJsonValue)
             }
           });
           await writeAudit(tx, {
@@ -607,7 +622,7 @@ export async function recruitmentCycleRoutes(app: FastifyInstance) {
           data: {
             ...parsed.data,
             options: parsed.data.options === undefined ? undefined : parsed.data.options ?? undefined,
-            validation: parsed.data.validation === undefined ? undefined : parsed.data.validation ?? undefined
+            validation: parsed.data.validation == null ? undefined : (parsed.data.validation as Prisma.InputJsonValue)
           }
         });
         await writeAudit(tx, {

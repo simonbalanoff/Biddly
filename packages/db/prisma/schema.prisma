@@ -147,6 +147,7 @@ model User {
   reviewedReports     ModerationReport[]    @relation("ReportReviewer")
   refreshTokens       RefreshToken[]
   passwordResetTokens PasswordResetToken[]
+  platformAuditLogs    PlatformAuditLog[]
 }
 
 model RefreshToken {
@@ -218,6 +219,9 @@ model Chapter {
   activeRecruitmentCycleId String?  @unique
   createdAt                DateTime @default(now())
   updatedAt                DateTime @updatedAt
+  storageQuotaBytes        BigInt?
+  supportNotes             String?
+  billingCustomerId        String?
 
   organization           Organization          @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   university             University            @relation(fields: [universityId], references: [id], onDelete: Restrict)
@@ -515,14 +519,14 @@ model CandidateStatusHistory {
   chapterId    String
   recruitmentCycleId String
   fromStatusId String?
-  toStatusId   String
+  toStatusId   String?
   changedById  String
   createdAt    DateTime @default(now())
 
   candidate        Candidate        @relation(fields: [candidateId], references: [id], onDelete: Cascade)
   recruitmentCycle RecruitmentCycle @relation(fields: [recruitmentCycleId], references: [id], onDelete: Cascade)
   fromStatus       CandidateStatus? @relation("StatusHistoryFrom", fields: [fromStatusId], references: [id], onDelete: SetNull)
-  toStatus         CandidateStatus  @relation("StatusHistoryTo", fields: [toStatusId], references: [id], onDelete: Restrict)
+  toStatus         CandidateStatus? @relation("StatusHistoryTo", fields: [toStatusId], references: [id], onDelete: SetNull)
   changedBy        User             @relation(fields: [changedById], references: [id], onDelete: Restrict)
 
   @@index([chapterId, recruitmentCycleId, createdAt])
@@ -618,20 +622,67 @@ model AuditLog {
   @@index([chapterId, action])
 }
 
+
+model PlatformAuditLog {
+  id         String   @id @default(cuid())
+  actorId    String
+  action     String
+  targetType String
+  targetId   String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  actor User @relation(fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([createdAt])
+  @@index([action, createdAt])
+  @@index([targetType, targetId, createdAt])
+}
+
 model ChapterSubscription {
-  id                     String             @id @default(cuid())
-  chapterId              String
-  term                   SubscriptionTerm
-  status                 SubscriptionStatus @default(TRIAL)
-  periodStart            DateTime
-  periodEnd              DateTime
-  provider               String?
-  providerCustomerId     String?
-  providerSubscriptionId String?
-  createdAt              DateTime           @default(now())
-  updatedAt              DateTime           @updatedAt
+  id                         String             @id @default(cuid())
+  chapterId                  String
+  term                       SubscriptionTerm
+  status                     SubscriptionStatus @default(TRIAL)
+  periodStart                DateTime
+  periodEnd                  DateTime
+  provider                   String?
+  providerCustomerId         String?
+  providerSubscriptionId     String?            @unique
+  providerStatus             String?
+  providerPriceId            String?
+  providerSubscriptionItemId String?
+  cancelAtPeriodEnd          Boolean            @default(false)
+  canceledAt                 DateTime?
+  trialEnd                   DateTime?
+  currency                   String?
+  unitAmount                 Int?
+  billingInterval            String?
+  latestInvoiceId            String?
+  latestInvoiceStatus        String?
+  livemode                   Boolean?
+  lastSyncedAt               DateTime?
+  createdAt                  DateTime           @default(now())
+  updatedAt                  DateTime           @updatedAt
 
   chapter Chapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
 
   @@index([chapterId, status, periodEnd])
+  @@index([providerCustomerId])
+  @@index([lastSyncedAt])
+}
+
+model StripeWebhookEvent {
+  id              String    @id @default(cuid())
+  stripeEventId   String    @unique
+  type            String
+  livemode        Boolean   @default(false)
+  stripeCreatedAt DateTime?
+  processedAt     DateTime?
+  error           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([type, createdAt])
+  @@index([processedAt, createdAt])
 }

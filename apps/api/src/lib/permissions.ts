@@ -14,6 +14,10 @@ export function requireChapterRole(minimum: keyof typeof rank) {
       return reply.code(403).send({ error: "Chapter access required" });
     }
 
+    if (user.chapterActive === false) {
+      return reply.code(403).send({ error: "This chapter workspace is currently suspended" });
+    }
+
     if (rank[user.chapterRole] < rank[minimum]) {
       return reply.code(403).send({ error: "Insufficient permissions" });
     }

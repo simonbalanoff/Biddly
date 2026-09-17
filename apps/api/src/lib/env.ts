@@ -22,7 +22,17 @@ const envSchema = z.object({
   R2_ACCESS_KEY_ID: z.preprocess(emptyToUndefined, z.string().optional()),
   R2_SECRET_ACCESS_KEY: z.preprocess(emptyToUndefined, z.string().optional()),
   R2_BUCKET_NAME: z.preprocess(emptyToUndefined, z.string().optional()),
-  R2_PUBLIC_BASE_URL: z.preprocess(emptyToUndefined, z.string().url().optional())
+  R2_PUBLIC_BASE_URL: z.preprocess(emptyToUndefined, z.string().url().optional()),
+  RESEND_API_KEY: z.preprocess(emptyToUndefined, z.string().optional()),
+  EMAIL_FROM: z.preprocess(emptyToUndefined, z.string().min(3).optional()),
+  SUPPORT_EMAIL: z.preprocess(emptyToUndefined, z.string().email().optional()),
+  STRIPE_SECRET_KEY: z.preprocess(emptyToUndefined, z.string().optional()),
+  STRIPE_WEBHOOK_SECRET: z.preprocess(emptyToUndefined, z.string().optional()),
+  STRIPE_API_VERSION: z.preprocess(emptyToUndefined, z.string().optional()),
+  STRIPE_PORTAL_CONFIGURATION_ID: z.preprocess(emptyToUndefined, z.string().optional()),
+  STRIPE_PRICE_SEMESTER: z.preprocess(emptyToUndefined, z.string().optional()),
+  STRIPE_PRICE_ACADEMIC_YEAR: z.preprocess(emptyToUndefined, z.string().optional()),
+  ERROR_REPORT_WEBHOOK_URL: z.preprocess(emptyToUndefined, z.string().url().optional())
 });
 
 export const env = envSchema.parse(process.env);

@@ -4,7 +4,8 @@ import { Prisma, prisma } from "@biddly/db";
 import { FastifyInstance } from "fastify";
 import { validateCustomFieldValues } from "../lib/custom-fields.js";
 import { normalizePhone } from "../lib/phone.js";
-import { createPrivateUploadUrl, storageConfigured } from "../lib/storage.js";
+import { createPrivateUploadUrl, privateStorageUsage, storageConfigured } from "../lib/storage.js";
+import { chapterHasActiveSubscription } from "../lib/subscription-access.js";
 
 function extensionForContentType(contentType: string) {
   if (contentType === "image/webp") return "webp";
@@ -54,10 +55,17 @@ export async function publicFormRoutes(app: FastifyInstance) {
     const chapter = form.recruitmentCycle.chapter;
     const organization = chapter.organization;
     const branding = chapter.branding;
+    const subscriptionActive = await chapterHasActiveSubscription(chapter.id);
 
     return {
       slug: form.slug,
-      isOpen: form.isOpen && form.recruitmentCycle.status === "ACTIVE",
+      isOpen:
+        form.isOpen &&
+        form.recruitmentCycle.status === "ACTIVE" &&
+        chapter.isActive &&
+        organization.isActive &&
+        chapter.university.isActive &&
+        subscriptionActive,
       title: form.title,
       introText: form.introText,
       organization: {
@@ -112,14 +120,31 @@ export async function publicFormRoutes(app: FastifyInstance) {
             include: {
               statuses: { orderBy: { position: "asc" }, take: 1 },
               fieldDefinitions: true,
-              chapter: true
+              chapter: {
+                include: {
+                  organization: { select: { isActive: true } },
+                  university: { select: { isActive: true } }
+                }
+              }
             }
           }
         }
       });
 
-      if (!form || !form.isOpen || form.recruitmentCycle.status !== "ACTIVE") {
+      if (
+        !form ||
+        !form.isOpen ||
+        form.recruitmentCycle.status !== "ACTIVE" ||
+        !form.recruitmentCycle.chapter.isActive ||
+        !form.recruitmentCycle.chapter.organization.isActive ||
+        !form.recruitmentCycle.chapter.university.isActive
+      ) {
         return reply.code(404).send({ error: "Form is not accepting submissions" });
+      }
+
+      const subscriptionActive = await chapterHasActiveSubscription(form.recruitmentCycle.chapterId);
+      if (!subscriptionActive) {
+        return reply.code(402).send({ error: "Form is not accepting submissions" });
       }
 
       if (form.emailMode === "REQUIRED" && !parsed.data.email) {
@@ -148,6 +173,14 @@ export async function publicFormRoutes(app: FastifyInstance) {
 
       if (parsed.data.photo && !storageConfigured()) {
         return reply.code(503).send({ error: "Photo uploads are temporarily unavailable" });
+      }
+
+      const storageQuota = form.recruitmentCycle.chapter.storageQuotaBytes;
+      if (parsed.data.photo && storageQuota !== null) {
+        const usage = await privateStorageUsage(`candidate-photos/${form.recruitmentCycle.chapterId}/`);
+        if (usage && BigInt(usage.totalBytes + parsed.data.photo.byteLength) > storageQuota) {
+          return reply.code(413).send({ error: "This workspace cannot accept another photo because its storage quota has been reached" });
+        }
       }
 
       const validation = validateCustomFieldValues(

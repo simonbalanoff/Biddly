@@ -15,7 +15,10 @@
     "db:studio": "pnpm --filter @biddly/db prisma:studio",
     "db:push": "pnpm --filter @biddly/db prisma:push",
     "local": "docker compose up -d && pnpm dev",
-    "local:stop": "docker compose down"
+    "local:stop": "docker compose down",
+    "test": "turbo test",
+    "test:integration": "pnpm --filter @biddly/api test:integration",
+    "prod:check": "node scripts/preflight.mjs"
   },
   "devDependencies": {
     "turbo": "^2.5.6",

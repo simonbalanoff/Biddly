@@ -1,0 +1,321 @@
+.healthCard {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  padding: 18px 20px;
+  margin-bottom: 14px;
+  border: 1px solid #e4e7ec;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.healthIcon {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: #ecfdf3;
+  color: #027a48;
+}
+
+.healthCard span,
+.healthCard h2,
+.healthCard p {
+  display: block;
+  margin: 0;
+}
+
+.healthCard > div:nth-child(2) > span {
+  color: #667085;
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+.healthCard h2 {
+  margin-top: 2px;
+  color: #101828;
+  font-size: 16px;
+}
+
+.healthCard p {
+  margin-top: 3px;
+  color: #667085;
+  font-size: 11px;
+}
+
+.serviceGrid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 9px;
+  margin-bottom: 18px;
+}
+
+.service {
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+  padding: 12px 13px;
+  border: 1px solid #e4e7ec;
+  border-radius: 9px;
+  background: #fff;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
+  margin-top: 5px;
+  border-radius: 50%;
+}
+
+.dotActive {
+  background: #12b76a;
+}
+
+.dotInactive {
+  background: #98a2b3;
+}
+
+.service strong,
+.service span {
+  display: block;
+}
+
+.service strong {
+  color: #344054;
+  font-size: 11.5px;
+}
+
+.service span {
+  margin-top: 2px;
+  color: #667085;
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.runtimePanel,
+.auditPanel {
+  margin-bottom: 18px;
+  overflow: hidden;
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid #eaecf0;
+}
+
+.sectionHeader h2 {
+  margin: 2px 0 0;
+  color: #101828;
+  font-size: 15px;
+}
+
+.sectionHeader p {
+  margin: 4px 0 0;
+  color: #667085;
+  font-size: 11px;
+}
+
+.runtimeRows {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding: 4px 20px 14px;
+}
+
+.runtime {
+  padding: 12px 10px;
+  border-bottom: 1px solid #eaecf0;
+}
+
+.runtime span,
+.runtime strong {
+  display: block;
+}
+
+.runtime span {
+  color: #667085;
+  font-size: 10px;
+}
+
+.runtime strong {
+  margin-top: 3px;
+  color: #344054;
+  font-size: 12px;
+}
+
+.attention {
+  color: #b42318 !important;
+}
+
+.toolbar {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) 240px;
+  gap: 10px;
+  padding: 12px 20px;
+  border-bottom: 1px solid #eaecf0;
+}
+
+.searchBox {
+  position: relative;
+}
+
+.searchBox svg {
+  position: absolute;
+  left: 11px;
+  top: 50%;
+  z-index: 1;
+  transform: translateY(-50%);
+  color: #98a2b3;
+}
+
+.searchBox input {
+  padding-left: 36px;
+}
+
+.auditList {
+  padding: 2px 20px 10px;
+}
+
+.auditRow {
+  min-height: 58px;
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 9px 0;
+  border-top: 1px solid #eaecf0;
+}
+
+.auditRow:first-child {
+  border-top: 0;
+}
+
+.auditIcon {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  background: #f2f4f7;
+  color: #667085;
+}
+
+.auditRow strong,
+.auditRow span {
+  display: block;
+}
+
+.auditRow strong {
+  color: #344054;
+  font-size: 12px;
+}
+
+.auditRow span {
+  margin-top: 2px;
+  color: #667085;
+  font-size: 10.5px;
+}
+
+.auditRow time {
+  color: #98a2b3;
+  font-size: 10.5px;
+  white-space: nowrap;
+}
+
+.empty {
+  padding: 20px;
+}
+
+@media (max-width: 1100px) {
+  .serviceGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .healthCard {
+    grid-template-columns: 42px minmax(0, 1fr);
+  }
+
+  .healthCard > :last-child {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .serviceGrid,
+  .runtimeRows {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .toolbar {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 520px) {
+  .serviceGrid,
+  .runtimeRows {
+    grid-template-columns: 1fr;
+  }
+
+  .auditRow {
+    grid-template-columns: 30px minmax(0, 1fr);
+  }
+
+  .auditRow time {
+    grid-column: 2;
+  }
+}
+
+
+/* consistency-pass-v2 */
+.healthCard,
+.service {
+  border-color: #dfe5ec;
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, .03);
+}
+
+.healthCard {
+  background: linear-gradient(135deg, #ffffff 0%, #fbfcfe 100%);
+}
+
+.service {
+  min-height: 68px;
+}
+
+.runtimePanel,
+.auditPanel {
+  border-radius: 12px;
+}
+
+.sectionHeader {
+  background: #fbfcfe;
+  border-bottom-color: #e6ebf1;
+}
+
+.toolbar {
+  background: #f8fafc;
+}
+
+.runtime {
+  min-height: 58px;
+}
+
+.auditRow {
+  margin: 0 -8px;
+  padding-left: 8px;
+  padding-right: 8px;
+  border-radius: 8px;
+  transition: background-color 120ms ease;
+}
+
+.auditRow:hover {
+  background: #fbfcfe;
+}

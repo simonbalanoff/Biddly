@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AppShell, Breadcrumbs, PageHeader } from "../../../../components/app-shell";
 import { Icon } from "../../../../components/icons";
-import { Badge, Button, EmptyState, Score, Spinner, StatusDot } from "../../../../components/ui";
+import { Badge, Button, ConfirmDialog, EmptyState, Score, Spinner, StatusDot } from "../../../../components/ui";
 import { apiRequest } from "../../../../lib/api";
 import type { CandidateList, RecruitmentCycle } from "../../../../lib/types";
 import { useAuth } from "../../../../providers/auth-provider";
@@ -18,6 +18,7 @@ export default function RecruitmentCyclePage() {
   const [candidates, setCandidates] = useState<CandidateList | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<"activate" | "archive" | null>(null);
   const [error, setError] = useState("");
   const scoreMax = context?.chapter?.settings?.scoreMax ?? 10;
 
@@ -42,24 +43,33 @@ export default function RecruitmentCyclePage() {
 
   const activate = async () => {
     if (!cycle) return;
-    if (context?.chapter?.activeRecruitmentCycle?.id && context.chapter.activeRecruitmentCycle.id !== cycle.id && !window.confirm(`Make ${cycle.name} active? Your current active cycle will be archived.`)) return;
     setBusy(true);
+    setError("");
     try {
       await apiRequest(`/recruitment-cycles/${cycle.id}/activate`, { method: "POST" });
       await refreshContext();
       await load();
+      setConfirmAction(null);
+    } catch (caught) {
+      setConfirmAction(null);
+      setError(caught instanceof Error ? caught.message : "Unable to activate recruitment cycle");
     } finally {
       setBusy(false);
     }
   };
 
   const archive = async () => {
-    if (!cycle || !window.confirm("Archive this recruitment cycle? Its public form will close and the cycle will become read-only until restored.")) return;
+    if (!cycle) return;
     setBusy(true);
+    setError("");
     try {
       await apiRequest(`/recruitment-cycles/${cycle.id}/archive`, { method: "POST" });
       await refreshContext();
       await load();
+      setConfirmAction(null);
+    } catch (caught) {
+      setConfirmAction(null);
+      setError(caught instanceof Error ? caught.message : "Unable to archive recruitment cycle");
     } finally {
       setBusy(false);
     }
@@ -94,10 +104,11 @@ export default function RecruitmentCyclePage() {
         actions={<>
           {isActive ? <Link href="/recruitment/form" className="button button-secondary button-md"><Icon name="form" size={17} /> Public form</Link> : null}
           {isArchived ? <Button variant="secondary" disabled={busy} onClick={() => void restore()}>Restore to draft</Button> : null}
-          {cycle.status === "DRAFT" ? <Button disabled={busy} onClick={() => void activate()}>Make active</Button> : null}
-          {isActive ? <Button variant="ghost" disabled={busy} onClick={() => void archive()}>Archive</Button> : null}
+          {cycle.status === "DRAFT" ? <Button disabled={busy} onClick={() => context?.chapter?.activeRecruitmentCycle?.id && context.chapter.activeRecruitmentCycle.id !== cycle.id ? setConfirmAction("activate") : void activate()}>Make active</Button> : null}
+          {isActive ? <Button variant="ghost" disabled={busy} onClick={() => setConfirmAction("archive")}>Archive</Button> : null}
         </>}
       />
+      {error ? <div className="form-alert form-alert-error page-alert">{error}<button type="button" onClick={() => setError("")}>Dismiss</button></div> : null}
 
       <div className="cycle-detail-status"><Badge tone={isActive ? "success" : cycle.status === "DRAFT" ? "warning" : "neutral"}>{cycle.status.toLowerCase()}</Badge>{isArchived ? <span>Read-only history</span> : null}</div>
 
@@ -112,6 +123,28 @@ export default function RecruitmentCyclePage() {
         <div className="panel-header"><div><span className="section-kicker">People</span><h2>PNMs from this cycle</h2><p>Review the people and scoring history captured during {cycle.name}.</p></div><Link href={`/candidates?cycleId=${cycle.id}`} className="button button-secondary button-sm">View all PNMs</Link></div>
         {candidates?.items.length ? <div className="data-table-wrap"><table className="data-table"><thead><tr><th>PNM</th><th>Status</th><th>Chapter score</th><th>Added</th><th /></tr></thead><tbody>{candidates.items.map((candidate) => <tr key={candidate.id}><td><Link className="candidate-cell" href={`/candidates/${candidate.id}?cycleId=${cycle.id}`}><span className="candidate-initials candidate-initials-sm">{candidate.firstName[0]}{candidate.lastName[0]}</span><span><strong>{candidate.firstName} {candidate.lastName}</strong><small>{candidate.email || candidate.phone || "No contact info"}</small></span></Link></td><td><span className="status-label"><StatusDot color={candidate.status.color} />{candidate.status.name}</span></td><td><Score value={candidate.aggregate?.averageScore} max={scoreMax} count={candidate.aggregate?.evaluationCount} /></td><td><span className="muted-cell">{new Date(candidate.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</span></td><td><Link className="row-action" href={`/candidates/${candidate.id}?cycleId=${cycle.id}`}><Icon name="chevron" size={16} /></Link></td></tr>)}</tbody></table></div> : <EmptyState title="No PNMs in this cycle" copy="This recruitment cycle does not contain any PNM records." />}
       </section>
+
+
+      <ConfirmDialog
+        open={confirmAction === "activate"}
+        onClose={() => setConfirmAction(null)}
+        onConfirm={activate}
+        title={cycle ? `Make ${cycle.name} active?` : "Make cycle active?"}
+        description="Your current active recruitment cycle will be archived automatically, and members will begin seeing this cycle instead."
+        confirmLabel="Make active"
+        tone="warning"
+        busy={busy}
+      />
+      <ConfirmDialog
+        open={confirmAction === "archive"}
+        onClose={() => setConfirmAction(null)}
+        onConfirm={archive}
+        title={cycle ? `Archive ${cycle.name}?` : "Archive cycle?"}
+        description="The public form will close and this cycle will become read-only until it is restored. Historical data will remain available."
+        confirmLabel="Archive cycle"
+        tone="warning"
+        busy={busy}
+      />
 
       <div className="cycle-detail-grid">
         <section className="panel">

@@ -168,3 +168,33 @@
   line-height: 1.5;
 }
 
+
+
+/* consistency-pass-v2 */
+.reactionAdd,
+.reactionPickerItem {
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease, transform 120ms ease;
+}
+
+.reactionAdd:focus-visible,
+.reactionPickerItem:focus-visible,
+.dangerLink:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--chapter-primary) 60%, #2563eb);
+  outline-offset: 2px;
+}
+
+.reactionAdd:active,
+.reactionPickerItem:active {
+  transform: translateY(1px);
+}
+
+.reactionPicker {
+  border-radius: 12px;
+  box-shadow: 0 14px 38px rgba(16, 24, 40, .14), 0 2px 6px rgba(16, 24, 40, .05);
+}
+
+.inlineReplyComposer {
+  border-color: #dfe5ec;
+  border-radius: 10px;
+  background: #fbfcfe;
+}

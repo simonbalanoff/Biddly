@@ -18,6 +18,7 @@ export type Organization = {
   accentColor?: string | null;
   logoUrl?: string | null;
   crestUrl?: string | null;
+  isActive?: boolean;
 };
 
 export type University = {
@@ -27,6 +28,7 @@ export type University = {
   city?: string | null;
   state?: string | null;
   country?: string;
+  isActive?: boolean;
 };
 
 export type ChapterBranding = {
@@ -74,12 +76,24 @@ export type MeContext = {
     id: string;
     name: string;
     slug: string;
+    isActive: boolean;
     organization: Organization;
     university: University;
     branding: ChapterBranding | null;
     settings: ChapterSettings | null;
     activeRecruitmentCycle: RecruitmentCycleSummary | null;
     subscription?: unknown;
+  } | null;
+  chapterAccess: {
+    active: boolean;
+    reason: "CHAPTER_SUSPENDED" | "ORGANIZATION_SUSPENDED" | "UNIVERSITY_SUSPENDED" | null;
+  } | null;
+  subscriptionAccess: {
+    active: boolean;
+    mode: "FULL" | "READ_ONLY" | "LOCKED";
+    status: "TRIAL" | "ACTIVE" | "PAST_DUE" | "CANCELED" | "EXPIRED" | "NONE";
+    periodEnd: string | null;
+    cancelAtPeriodEnd: boolean;
   } | null;
 };
 
@@ -90,6 +104,10 @@ export type CandidateStatus = {
   position: number;
   color?: string | null;
   isTerminal: boolean;
+  _count?: {
+    candidates: number;
+    historyTo: number;
+  };
 };
 
 export type CandidateField = {
@@ -152,6 +170,7 @@ export type Candidate = {
   aggregate?: CandidateAggregate | null;
   myEvaluation?: { id?: string; score: number; updatedAt: string } | null;
   hasPhoto?: boolean;
+  photoUrl?: string | null;
   archivedAt?: string | null;
   createdAt: string;
   updatedAt: string;
@@ -164,7 +183,7 @@ export type Candidate = {
     id: string;
     createdAt: string;
     fromStatus?: { id: string; name: string } | null;
-    toStatus: { id: string; name: string };
+    toStatus: { id: string; name: string } | null;
     changedBy: { id: string; firstName: string; lastName: string };
   }>;
   _count?: { comments: number };
@@ -222,8 +241,8 @@ export type CandidateComment = {
   state: "VISIBLE" | "HIDDEN" | "REMOVED";
   createdAt: string;
   updatedAt: string;
-  authorScore?: number | null;
   user: { id: string; firstName: string; lastName: string };
+  authorScore: number | null;
   reactions: CommentReaction[];
   replies: CandidateComment[];
 };

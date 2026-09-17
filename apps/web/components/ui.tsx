@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "./icons";
 
@@ -8,20 +8,27 @@ export function Button({
     variant = "primary",
     size = "md",
     icon,
+    loading = false,
     className = "",
+    disabled,
+    children,
     ...props
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & {
     variant?: "primary" | "secondary" | "ghost" | "danger";
     size?: "sm" | "md";
     icon?: Parameters<typeof Icon>[0]["name"];
+    loading?: boolean;
 }) {
     return (
         <button
-            className={`button button-${variant} button-${size} ${className}`}
             {...props}
+            type={props.type ?? "button"}
+            disabled={disabled || loading}
+            aria-busy={loading || undefined}
+            className={`button button-${variant} button-${size} ${className}`}
         >
-            {icon ? <Icon name={icon} size={size === "sm" ? 15 : 17} /> : null}
-            {props.children}
+            {loading ? <span className="button-spinner" aria-hidden="true" /> : icon ? <Icon name={icon} size={size === "sm" ? 15 : 17} /> : null}
+            {children}
         </button>
     );
 }
@@ -737,6 +744,7 @@ export function StatusDot({ color }: { color?: string | null }) {
         <span
             className="status-dot"
             style={{ background: color || "#8a9099" }}
+            aria-hidden="true"
         />
     );
 }
@@ -783,13 +791,47 @@ export function Modal({
     width?: string;
     scrollable?: boolean;
 }) {
+    const titleId = useId();
+    const subtitleId = useId();
+    const modalRef = useRef<HTMLDivElement>(null);
+
     useEffect(() => {
         if (!open) return;
+        const previousOverflow = document.body.style.overflow;
+        const previousActive = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        document.body.style.overflow = "hidden";
+        const frame = window.requestAnimationFrame(() => modalRef.current?.focus());
         const listener = (event: KeyboardEvent) => {
-            if (event.key === "Escape") onClose();
+            if (event.key === "Escape") {
+                onClose();
+                return;
+            }
+            if (event.key !== "Tab") return;
+            const root = modalRef.current;
+            if (!root) return;
+            const focusable = Array.from(root.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')).filter((element) => !element.hasAttribute("hidden") && element.getAttribute("aria-hidden") !== "true");
+            if (!focusable.length) {
+                event.preventDefault();
+                root.focus();
+                return;
+            }
+            const first = focusable[0];
+            const last = focusable[focusable.length - 1];
+            if (event.shiftKey && (document.activeElement === first || document.activeElement === root)) {
+                event.preventDefault();
+                last.focus();
+            } else if (!event.shiftKey && document.activeElement === last) {
+                event.preventDefault();
+                first.focus();
+            }
         };
         window.addEventListener("keydown", listener);
-        return () => window.removeEventListener("keydown", listener);
+        return () => {
+            window.cancelAnimationFrame(frame);
+            window.removeEventListener("keydown", listener);
+            document.body.style.overflow = previousOverflow;
+            previousActive?.focus();
+        };
     }, [open, onClose]);
 
     if (!open) return null;
@@ -801,15 +843,22 @@ export function Modal({
             }}
         >
             <div
+                ref={modalRef}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby={titleId}
+                aria-describedby={subtitle ? subtitleId : undefined}
+                tabIndex={-1}
                 className={`modal ${scrollable ? "" : "modal-no-scroll"}`}
                 style={{ maxWidth: width }}
             >
                 <div className="modal-header">
                     <div>
-                        <h2>{title}</h2>
-                        {subtitle ? <p>{subtitle}</p> : null}
+                        <h2 id={titleId}>{title}</h2>
+                        {subtitle ? <p id={subtitleId}>{subtitle}</p> : null}
                     </div>
                     <button
+                        type="button"
                         className="icon-button"
                         onClick={onClose}
                         aria-label="Close"
@@ -821,6 +870,48 @@ export function Modal({
                 {footer ? <div className="modal-footer">{footer}</div> : null}
             </div>
         </div>
+    );
+}
+
+export function ConfirmDialog({
+    open,
+    onClose,
+    onConfirm,
+    title,
+    description,
+    confirmLabel = "Confirm",
+    cancelLabel = "Cancel",
+    tone = "danger",
+    busy = false,
+}: {
+    open: boolean;
+    onClose: () => void;
+    onConfirm: () => void | Promise<void>;
+    title: string;
+    description: string;
+    confirmLabel?: string;
+    cancelLabel?: string;
+    tone?: "danger" | "warning" | "neutral";
+    busy?: boolean;
+}) {
+    return (
+        <Modal
+            open={open}
+            onClose={busy ? () => undefined : onClose}
+            title={title}
+            width="480px"
+            footer={
+                <>
+                    <Button variant="secondary" disabled={busy} onClick={onClose}>{cancelLabel}</Button>
+                    <Button variant={tone === "danger" ? "danger" : "primary"} loading={busy} onClick={() => void onConfirm()}>{confirmLabel}</Button>
+                </>
+            }
+        >
+            <div className={`confirm-dialog confirm-dialog-${tone}`}>
+                <div className="confirm-dialog-icon"><Icon name={tone === "danger" ? "trash" : tone === "warning" ? "activity" : "check"} size={18} /></div>
+                <div className="confirm-dialog-copy"><p>{description}</p></div>
+            </div>
+        </Modal>
     );
 }
 
@@ -851,11 +942,11 @@ export function Toggle({
 }
 
 export function Spinner({ size = 24 }: { size?: number }) {
-    return <span className="spinner" style={{ width: size, height: size }} />;
+    return <span className="spinner" style={{ width: size, height: size }} aria-hidden="true" />;
 }
 
 export function Skeleton({ className = "" }: { className?: string }) {
-    return <div className={`skeleton ${className}`} />;
+    return <div className={`skeleton ${className}`} aria-hidden="true" />;
 }
 
 export function Score({
@@ -900,6 +991,7 @@ export function Avatar({
     return (
         <span
             className="avatar"
+            aria-hidden="true"
             style={{
                 width: size,
                 height: size,

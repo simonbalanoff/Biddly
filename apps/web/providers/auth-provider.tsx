@@ -1,14 +1,14 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { apiRequest, clearStoredSession, getStoredSession, publicApiRequest, setStoredSession } from "../lib/api";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { ApiError, apiRequest, clearStoredSession, getStoredSession, publicApiRequest, setStoredSession } from "../lib/api";
 import type { MeContext, Session } from "../lib/types";
 
 type AuthContextValue = {
   context: MeContext | null;
   loading: boolean;
   signedIn: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<MeContext>;
   logout: () => Promise<void>;
   refreshContext: () => Promise<MeContext | null>;
 };
@@ -18,48 +18,75 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [context, setContext] = useState<MeContext | null>(null);
   const [loading, setLoading] = useState(true);
+  const refreshContextPromise = useRef<Promise<MeContext | null> | null>(null);
 
   const refreshContext = useCallback(async () => {
     if (!getStoredSession()) {
       setContext(null);
       return null;
     }
+
+    if (refreshContextPromise.current) {
+      return refreshContextPromise.current;
+    }
+
+    const request = (async () => {
+      try {
+        const next = await apiRequest<MeContext>("/me/context");
+        setContext(next);
+        return next;
+      } catch (caught) {
+        if (caught instanceof ApiError && caught.status === 401) {
+          clearStoredSession();
+          setContext(null);
+        }
+        return null;
+      }
+    })();
+
+    refreshContextPromise.current = request;
+
     try {
-      const next = await apiRequest<MeContext>("/me/context");
-      setContext(next);
-      return next;
-    } catch {
-      setContext(null);
-      return null;
+      return await request;
+    } finally {
+      if (refreshContextPromise.current === request) {
+        refreshContextPromise.current = null;
+      }
     }
   }, []);
 
   useEffect(() => {
     let active = true;
+
     const boot = async () => {
       if (!getStoredSession()) {
         if (active) setLoading(false);
         return;
       }
-      try {
-        const next = await apiRequest<MeContext>("/me/context");
-        if (active) setContext(next);
-      } catch {
-        if (active) setContext(null);
-      } finally {
-        if (active) setLoading(false);
-      }
+
+      await refreshContext();
+      if (active) setLoading(false);
     };
+
     void boot();
-    const listener = () => {
+
+    const sessionListener = () => {
       if (!getStoredSession()) setContext(null);
     };
-    window.addEventListener("biddly-session", listener);
+
+    const accessListener = () => {
+      void refreshContext();
+    };
+
+    window.addEventListener("biddly-session", sessionListener);
+    window.addEventListener("biddly-access-changed", accessListener);
+
     return () => {
       active = false;
-      window.removeEventListener("biddly-session", listener);
+      window.removeEventListener("biddly-session", sessionListener);
+      window.removeEventListener("biddly-access-changed", accessListener);
     };
-  }, []);
+  }, [refreshContext]);
 
   const login = useCallback(async (email: string, password: string) => {
     const session = await publicApiRequest<Session>("/auth/login", {
@@ -69,6 +96,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setStoredSession(session);
     const next = await apiRequest<MeContext>("/me/context");
     setContext(next);
+    return next;
   }, []);
 
   const logout = useCallback(async () => {

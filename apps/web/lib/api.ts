@@ -39,6 +39,8 @@ export function clearStoredSession() {
 }
 
 let refreshPromise: Promise<Session | null> | null = null;
+let accessChangePending = false;
+const suspendedRequest = new Promise<never>(() => {});
 
 async function parseResponse(response: Response) {
   if (response.status === 204) return null;
@@ -93,6 +95,44 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}, retry 
 
   const payload = await parseResponse(response);
   if (!response.ok) {
+    const suspension =
+      path !== "/me/context" &&
+      response.status === 403 &&
+      payload &&
+      typeof payload === "object" &&
+      "code" in payload &&
+      ["CHAPTER_SUSPENDED", "ORGANIZATION_SUSPENDED", "UNIVERSITY_SUSPENDED"].includes(String((payload as { code: unknown }).code));
+
+    if (suspension && typeof window !== "undefined") {
+      if (!accessChangePending) {
+        accessChangePending = true;
+        window.dispatchEvent(new Event("biddly-access-changed"));
+        window.setTimeout(() => {
+          accessChangePending = false;
+        }, 1500);
+      }
+      return suspendedRequest;
+    }
+
+    const subscriptionCode =
+      response.status === 402 &&
+      payload &&
+      typeof payload === "object" &&
+      "code" in payload
+        ? String((payload as { code: unknown }).code)
+        : null;
+
+    if ((subscriptionCode === "SUBSCRIPTION_REQUIRED" || subscriptionCode === "SUBSCRIPTION_READ_ONLY") && typeof window !== "undefined") {
+      if (!accessChangePending) {
+        accessChangePending = true;
+        window.dispatchEvent(new Event("biddly-access-changed"));
+        window.setTimeout(() => {
+          accessChangePending = false;
+        }, 1500);
+      }
+      if (subscriptionCode === "SUBSCRIPTION_REQUIRED") return suspendedRequest;
+    }
+
     const message = payload && typeof payload === "object" && "error" in payload ? String((payload as { error: unknown }).error) : `Request failed with status ${response.status}`;
     throw new ApiError(message, response.status, payload);
   }

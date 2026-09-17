@@ -27,8 +27,11 @@ export default function CandidateDetailPage() {
   const [actionBusy, setActionBusy] = useState(false);
   const [error, setError] = useState("");
   const canManage = context?.membership?.role === "MODERATOR" || context?.membership?.role === "CHAPTER_ADMIN";
+  const memberMode = context?.membership?.role === "MEMBER" && context.user.platformRole !== "PLATFORM_ADMIN";
   const settings = context?.chapter?.settings;
   const readOnlyHistory = Boolean(cycle && cycle.status !== "ACTIVE");
+  const readOnlySubscription = context?.subscriptionAccess?.mode === "READ_ONLY";
+  const readOnly = readOnlyHistory || readOnlySubscription;
 
   const loadComments = async () => {
     try {
@@ -60,8 +63,13 @@ export default function CandidateDetailPage() {
   };
 
   useEffect(() => {
+    if (memberMode) router.replace("/candidates");
+  }, [memberMode, router]);
+
+  useEffect(() => {
+    if (!context || memberMode) return;
     void load();
-  }, [candidateId]);
+  }, [candidateId, context?.membership?.role, memberMode]);
 
   const scoreMin = settings?.scoreMin ?? 1;
   const scoreMax = settings?.scoreMax ?? 10;
@@ -110,7 +118,7 @@ export default function CandidateDetailPage() {
     }
   };
 
-  if (loading) return <AppShell><div className="detail-loading"><Spinner /><span>Loading PNM…</span></div></AppShell>;
+  if (memberMode || loading) return <AppShell><div className="detail-loading"><Spinner /><span>{memberMode ? "Back to PNMs…" : "Loading PNM…"}</span></div></AppShell>;
   if (!candidate) return <AppShell><div className="panel panel-spacious"><EmptyState title="PNM unavailable" copy={error || "This record could not be loaded."} action={<Link href="/candidates" className="button button-secondary button-md">Back to PNMs</Link>} /></div></AppShell>;
 
   return (
@@ -128,14 +136,14 @@ export default function CandidateDetailPage() {
         <div className="candidate-hero-score"><span>Chapter score</span><Score value={candidate.aggregate?.averageScore} max={scoreMax} count={candidate.aggregate?.evaluationCount ?? 0} large /></div>
       </section>
 
-      {error ? <div className="form-alert form-alert-error page-alert">{error}<button onClick={() => setError("")}>Dismiss</button></div> : null}
+      {error ? <div className="form-alert form-alert-error page-alert">{error}<button type="button" onClick={() => setError("")}>Dismiss</button></div> : null}
 
       <div className="candidate-detail-grid">
         <div className="candidate-detail-main">
           <section className="panel score-panel">
-            <div className="panel-header"><div><span className="section-kicker">Your evaluation</span><h2>{readOnlyHistory ? "Your submitted score" : "Score this PNM"}</h2></div>{!readOnlyHistory && scoreBusy ? <span className="saving-text"><Spinner size={14} /> Saving</span> : !readOnlyHistory && candidate.myEvaluation ? <span className="saved-text">Saved</span> : null}</div>
-            {readOnlyHistory ? <div className="historical-score"><strong>{candidate.myEvaluation?.score ?? "—"}</strong><span>out of {scoreMax}</span></div> : possibleScores.length ? <div className="score-buttons">{possibleScores.map((value) => <button key={value} onClick={() => void saveScore(value)} className={score === value ? "score-button score-button-active" : "score-button"}>{value}</button>)}</div> : <div className="score-slider-wrap"><input type="range" min={scoreMin} max={scoreMax} step={scoreStep} value={score ?? scoreMin} onChange={(event) => setScore(Number(event.target.value))} onMouseUp={() => { if (score !== null) void saveScore(score); }} /><strong>{score ?? "—"}</strong></div>}
-            {!readOnlyHistory ? <div className="score-help"><span>{scoreMin} = lowest</span><span>{scoreMax} = highest</span></div> : null}
+            <div className="panel-header"><div><span className="section-kicker">Your evaluation</span><h2>{readOnly ? "Your submitted score" : "Score this PNM"}</h2></div>{!readOnly && scoreBusy ? <span className="saving-text"><Spinner size={14} /> Saving</span> : !readOnly && candidate.myEvaluation ? <span className="saved-text">Saved</span> : null}</div>
+            {readOnly ? <div className="historical-score"><strong>{candidate.myEvaluation?.score ?? "—"}</strong><span>out of {scoreMax}</span></div> : possibleScores.length ? <div className="score-buttons">{possibleScores.map((value) => <button type="button" key={value} onClick={() => void saveScore(value)} className={score === value ? "score-button score-button-active" : "score-button"}>{value}</button>)}</div> : <div className="score-slider-wrap"><input type="range" min={scoreMin} max={scoreMax} step={scoreStep} value={score ?? scoreMin} onChange={(event) => setScore(Number(event.target.value))} onMouseUp={() => { if (score !== null) void saveScore(score); }} /><strong>{score ?? "—"}</strong></div>}
+            {!readOnly ? <div className="score-help"><span>{scoreMin} = lowest</span><span>{scoreMax} = highest</span></div> : null}
           </section>
 
           <section className="panel">
@@ -149,19 +157,19 @@ export default function CandidateDetailPage() {
             </div>
           </section>
 
-          {settings?.commentsEnabled || canManage ? <Discussion candidateId={candidateId} comments={comments} setComments={setComments} repliesEnabled={Boolean(settings?.repliesEnabled)} reactionsEnabled={Boolean(settings?.reactionsEnabled)} canModerate={canManage} currentUserId={context?.user.id ?? ""} readOnly={readOnlyHistory} scoreMax={scoreMax} /> : <section className="panel"><EmptyState icon="message" title="Discussion is turned off" copy="Your chapter has disabled PNM comments for this recruitment cycle." /></section>}
+          {settings?.commentsEnabled || canManage ? <Discussion candidateId={candidateId} comments={comments} setComments={setComments} repliesEnabled={Boolean(settings?.repliesEnabled)} reactionsEnabled={Boolean(settings?.reactionsEnabled)} canModerate={canManage} currentUserId={context?.user.id ?? ""} readOnly={readOnly} scoreMax={scoreMax} /> : <section className="panel"><EmptyState icon="message" title="Discussion is turned off" copy="Your chapter has disabled PNM comments for this recruitment cycle." /></section>}
         </div>
 
         <aside className="candidate-detail-side">
           <section className="panel compact-panel">
             <div className="panel-header"><div><span className="section-kicker">Recruitment</span><h2>Status</h2></div></div>
-            {canManage && !readOnlyHistory ? <Select compact className="candidate-status-select" value={candidate.statusId} disabled={statusBusy} onChange={(next) => void changeStatus(next)} options={(cycle?.statuses ?? []).map((status) => ({ value: status.id, label: status.name }))} /> : <div className="status-display"><StatusDot color={candidate.status.color} /><strong>{candidate.status.name}</strong></div>}
-            <p className="panel-note">{readOnlyHistory ? "This status is preserved from the archived recruitment cycle." : canManage ? "Changing status is recorded in the chapter audit history." : "Recruitment chairs and moderators manage pipeline status."}</p>
+            {canManage && !readOnly ? <Select compact className="candidate-status-select" value={candidate.statusId} disabled={statusBusy} onChange={(next) => void changeStatus(next)} options={(cycle?.statuses ?? []).map((status) => ({ value: status.id, label: status.name }))} /> : <div className="status-display"><StatusDot color={candidate.status.color} /><strong>{candidate.status.name}</strong></div>}
+            <p className="panel-note">{readOnlyHistory ? "This status is preserved from the archived recruitment cycle." : readOnlySubscription ? "Status changes are disabled while the workspace is in read-only mode." : canManage ? "Changing status is recorded in the chapter audit history." : "Recruitment chairs and moderators manage pipeline status."}</p>
           </section>
 
-          {candidate.statusHistory?.length ? <section className="panel compact-panel"><div className="panel-header"><div><span className="section-kicker">History</span><h2>Recent activity</h2></div></div><div className="timeline">{candidate.statusHistory.slice(0, 8).map((item) => <div className="timeline-item" key={item.id}><span className="timeline-dot" /><div><strong>{item.toStatus.name}</strong><span>{item.changedBy.firstName} {item.changedBy.lastName}</span><small>{new Date(item.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</small></div></div>)}</div></section> : null}
+          {candidate.statusHistory?.length ? <section className="panel compact-panel"><div className="panel-header"><div><span className="section-kicker">History</span><h2>Recent activity</h2></div></div><div className="timeline">{candidate.statusHistory.slice(0, 8).map((item) => <div className="timeline-item" key={item.id}><span className="timeline-dot" /><div><strong>{item.toStatus?.name ?? "Removed status"}</strong><span>{item.changedBy.firstName} {item.changedBy.lastName}</span><small>{new Date(item.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</small></div></div>)}</div></section> : null}
 
-          {canManage && !readOnlyHistory ? <section className="panel compact-panel danger-zone"><div><span className="section-kicker">Record</span><h2>{candidate.archivedAt ? "Restore PNM" : "Archive PNM"}</h2><p>{candidate.archivedAt ? "Restore this person to the active PNM list." : "Remove this person from normal recruitment views without deleting their history."}</p></div><Button variant={candidate.archivedAt ? "secondary" : "danger"} icon={candidate.archivedAt ? "archive" : "trash"} disabled={actionBusy} onClick={() => void toggleArchive()}>{candidate.archivedAt ? "Restore" : "Archive"}</Button></section> : null}
+          {canManage && !readOnly ? <section className="panel compact-panel danger-zone"><div><span className="section-kicker">Record</span><h2>{candidate.archivedAt ? "Restore PNM" : "Archive PNM"}</h2><p>{candidate.archivedAt ? "Restore this person to the active PNM list." : "Remove this person from normal recruitment views without deleting their history."}</p></div><Button variant={candidate.archivedAt ? "secondary" : "danger"} icon={candidate.archivedAt ? "archive" : "trash"} disabled={actionBusy} onClick={() => void toggleArchive()}>{candidate.archivedAt ? "Restore" : "Archive"}</Button></section> : null}
         </aside>
       </div>
     </AppShell>

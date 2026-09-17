@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { AppShell, Breadcrumbs, PageHeader } from "../../../components/app-shell";
 import { Icon } from "../../../components/icons";
-import { Badge, Button, CopyButton, Field, Input, Modal, Select, Spinner, Textarea, Toggle } from "../../../components/ui";
+import { Badge, Button, ConfirmDialog, CopyButton, Field, Input, Modal, Select, Spinner, Textarea, Toggle } from "../../../components/ui";
 import { apiRequest } from "../../../lib/api";
 import type { CandidateField, PublicFormConfig, RecruitmentCycle } from "../../../lib/types";
 import { useAuth } from "../../../providers/auth-provider";
@@ -34,6 +34,8 @@ export default function FormBuilderPage() {
   const [message, setMessage] = useState("");
   const [fieldOpen, setFieldOpen] = useState(false);
   const [editingField, setEditingField] = useState<CandidateField | null>(null);
+  const [fieldToDelete, setFieldToDelete] = useState<CandidateField | null>(null);
+  const [deletingField, setDeletingField] = useState(false);
 
   const loadCycle = async () => {
     if (!cycleId) return;
@@ -108,12 +110,18 @@ export default function FormBuilderPage() {
   };
 
   const removeField = async (field: CandidateField) => {
-    if (!cycleId || !window.confirm(`Delete the “${field.label}” field? Existing values collected for this field will also be removed.`)) return;
+    if (!cycleId) return;
+    setDeletingField(true);
+    setMessage("");
     try {
       await apiRequest(`/recruitment-cycles/${cycleId}/fields/${field.id}`, { method: "DELETE" });
       await loadCycle();
+      setFieldToDelete(null);
     } catch (caught) {
+      setFieldToDelete(null);
       setMessage(caught instanceof Error ? caught.message : "Unable to delete field");
+    } finally {
+      setDeletingField(false);
     }
   };
 
@@ -123,7 +131,7 @@ export default function FormBuilderPage() {
   return <AppShell>
     <Breadcrumbs items={[{ label: "Recruitment", href: "/recruitment" }, { label: cycle?.name ?? "Active cycle", href: cycleId ? `/recruitment/cycles/${cycleId}` : "/recruitment" }, { label: "Public form" }]} />
     <PageHeader eyebrow={cycle?.name} title="Recruitment form" description="Build the form PNMs see, choose exactly what you collect, and preview the chapter-branded experience." actions={<><Button variant="secondary" icon="external" onClick={() => window.open(`/r/${draft.slug}`, "_blank")}>Preview</Button><Button className={!changed && saveState === "saved" ? "button-saved" : ""} icon={!changed && saveState === "saved" ? "check" : undefined} disabled={!changed || busy} onClick={() => void save()}>{busy ? "Saving…" : changed ? "Save changes" : saveState === "saved" ? "Saved" : "No changes"}</Button></>} />
-    {message ? <div className={`form-alert ${saveState === "error" || message !== "Saved" ? "form-alert-error" : "form-alert-success"} page-alert`}>{message}<button onClick={() => setMessage("")}>Dismiss</button></div> : null}
+    {message ? <div className={`form-alert ${saveState === "error" || message !== "Saved" ? "form-alert-error" : "form-alert-success"} page-alert`}>{message}<button type="button" onClick={() => setMessage("")}>Dismiss</button></div> : null}
     <div className="form-builder-grid">
       <div className="form-builder-settings">
         <section className="panel">
@@ -144,7 +152,7 @@ export default function FormBuilderPage() {
 
         <section className="panel">
           <div className="panel-header"><div><span className="section-kicker">Custom questions</span><h2>Form fields</h2><p>Add chapter-specific questions and control exactly what PNMs see on this form.</p></div><Button variant="secondary" size="sm" icon="plus" onClick={() => { setEditingField(null); setFieldOpen(true); }}>Add field</Button></div>
-          {cycle?.fieldDefinitions.length ? <div className="form-custom-fields">{cycle.fieldDefinitions.map((field) => <FormFieldRow key={field.id} field={field} onPatch={(body) => void patchField(field.id, body)} onEdit={() => { setEditingField(field); setFieldOpen(true); }} onDelete={() => void removeField(field)} />)}</div> : <div className="config-empty"><span>No custom questions yet.</span><button onClick={() => { setEditingField(null); setFieldOpen(true); }}>Add your first field</button></div>}
+          {cycle?.fieldDefinitions.length ? <div className="form-custom-fields">{cycle.fieldDefinitions.map((field) => <FormFieldRow key={field.id} field={field} onPatch={(body) => void patchField(field.id, body)} onEdit={() => { setEditingField(field); setFieldOpen(true); }} onDelete={() => setFieldToDelete(field)} />)}</div> : <div className="config-empty"><span>No custom questions yet.</span><button type="button" onClick={() => { setEditingField(null); setFieldOpen(true); }}>Add your first field</button></div>}
         </section>
       </div>
 
@@ -152,6 +160,15 @@ export default function FormBuilderPage() {
     </div>
 
     <FieldEditorModal open={fieldOpen} onClose={() => { setFieldOpen(false); setEditingField(null); }} cycleId={cycleId} field={editingField} onSaved={async () => { setFieldOpen(false); setEditingField(null); await loadCycle(); }} />
+    <ConfirmDialog
+      open={Boolean(fieldToDelete)}
+      onClose={() => setFieldToDelete(null)}
+      onConfirm={() => fieldToDelete ? removeField(fieldToDelete) : undefined}
+      title={fieldToDelete ? `Delete “${fieldToDelete.label}”?` : "Delete field?"}
+      description="This removes the field from the recruitment form and deletes the values previously collected for it. This action cannot be undone."
+      confirmLabel="Delete field"
+      busy={deletingField}
+    />
   </AppShell>;
 }
 
@@ -165,7 +182,7 @@ function FormFieldRow({ field, onPatch, onEdit, onDelete }: { field: CandidateFi
     <div className="form-custom-field-copy"><div><strong>{field.label}</strong>{field.visibleOnPublicForm ? <Badge tone="accent">On form</Badge> : <Badge>Hidden</Badge>}</div><span>{FIELD_TYPE_OPTIONS.find((option) => option.value === field.type)?.label ?? field.type}</span></div>
     <div className="form-custom-field-controls"><label><Toggle checked={field.visibleOnPublicForm} onChange={(checked) => onPatch({ visibleOnPublicForm: checked })} /><span>Show</span></label><label><Toggle checked={field.required} onChange={(checked) => onPatch({ required: checked })} /><span>Required</span></label></div>
     <Button variant="ghost" size="sm" onClick={onEdit}>Edit</Button>
-    <button className="icon-button" onClick={onDelete} aria-label={`Delete ${field.label}`}><Icon name="trash" size={16} /></button>
+    <button type="button" className="icon-button" onClick={onDelete} aria-label={`Delete ${field.label}`}><Icon name="trash" size={16} /></button>
   </div>;
 }
 
@@ -234,7 +251,7 @@ function FormPreview({ context, draft, cycle }: { context: ReturnType<typeof use
   const remaining = Math.max(0, visibleFields.length - previewFields.length);
   const theme = { "--preview-primary": primary, "--preview-secondary": secondary, "--preview-accent": accent } as React.CSSProperties;
 
-  return <div className="form-preview" style={theme}><div className="preview-topbar"><span /></div><div className="preview-body"><div className="preview-brand">{crest ? <img src={crest} alt="" /> : <span>{(context?.chapter?.organization.shortName || "B").slice(0, 2)}</span>}<div><strong>{context?.chapter?.organization.name}</strong><small>{context?.chapter?.university.name}</small></div></div><div className="preview-title-accent" /><h3>{draft.title || `${cycle?.name ?? "Recruitment"} Form`}</h3><p>{draft.introText || "Share a short introduction to your chapter and let PNMs know what to expect after submitting."}</p><div className="preview-fields"><PreviewInput label="First Name" required /><PreviewInput label="Last Name" required />{draft.emailMode !== "HIDDEN" ? <PreviewInput label="Email" required={draft.emailMode === "REQUIRED"} /> : null}{draft.phoneMode !== "HIDDEN" ? <PreviewInput label="Phone" required={draft.phoneMode === "REQUIRED"} /> : null}{previewFields.map((field) => <PreviewInput key={field.id} label={field.label} required={field.required} multiline={field.type === "LONG_TEXT"} />)}{remaining ? <div className="preview-more-fields">+ {remaining} more {remaining === 1 ? "question" : "questions"}</div> : null}{draft.photoMode !== "HIDDEN" ? <div className="preview-upload"><Icon name="upload" /><span>Upload photo{draft.photoMode === "REQUIRED" ? " *" : ""}</span></div> : null}</div><button className="preview-submit">Submit information</button></div></div>;
+  return <div className="form-preview" style={theme}><div className="preview-topbar"><span /></div><div className="preview-body"><div className="preview-brand">{crest ? <img src={crest} alt="" /> : <span>{(context?.chapter?.organization.shortName || "B").slice(0, 2)}</span>}<div><strong>{context?.chapter?.organization.name}</strong><small>{context?.chapter?.university.name}</small></div></div><div className="preview-title-accent" /><h3>{draft.title || `${cycle?.name ?? "Recruitment"} Form`}</h3><p>{draft.introText || "Share a short introduction to your chapter and let PNMs know what to expect after submitting."}</p><div className="preview-fields"><PreviewInput label="First Name" required /><PreviewInput label="Last Name" required />{draft.emailMode !== "HIDDEN" ? <PreviewInput label="Email" required={draft.emailMode === "REQUIRED"} /> : null}{draft.phoneMode !== "HIDDEN" ? <PreviewInput label="Phone" required={draft.phoneMode === "REQUIRED"} /> : null}{previewFields.map((field) => <PreviewInput key={field.id} label={field.label} required={field.required} multiline={field.type === "LONG_TEXT"} />)}{remaining ? <div className="preview-more-fields">+ {remaining} more {remaining === 1 ? "question" : "questions"}</div> : null}{draft.photoMode !== "HIDDEN" ? <div className="preview-upload"><Icon name="upload" /><span>Upload photo{draft.photoMode === "REQUIRED" ? " *" : ""}</span></div> : null}</div><button type="button" className="preview-submit">Submit information</button></div></div>;
 }
 
 function PreviewInput({ label, required, multiline = false }: { label: string; required?: boolean; multiline?: boolean }) {

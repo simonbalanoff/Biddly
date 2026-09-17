@@ -13,7 +13,7 @@ import { writeAudit } from "../lib/audit.js";
 import { validateCustomFieldValues } from "../lib/custom-fields.js";
 import { normalizePhone } from "../lib/phone.js";
 import { requireChapterRole } from "../lib/permissions.js";
-import { createPrivateDownloadUrl, createPrivateUploadUrl, storageConfigured } from "../lib/storage.js";
+import { createPrivateDownloadUrl, createPrivateUploadUrl, privateStorageUsage, storageConfigured } from "../lib/storage.js";
 
 function extensionForContentType(contentType: string) {
   if (contentType === "image/webp") return "webp";
@@ -111,12 +111,17 @@ export async function candidateRoutes(app: FastifyInstance) {
       ...(parsed.data.statusId ? { statusId: parsed.data.statusId } : {}),
       ...(parsed.data.q
         ? {
-            OR: [
-              { firstName: { contains: parsed.data.q, mode: "insensitive" } },
-              { lastName: { contains: parsed.data.q, mode: "insensitive" } },
-              { email: { contains: parsed.data.q, mode: "insensitive" } },
-              { phone: { contains: parsed.data.q } }
-            ]
+            OR: user.chapterRole === "MEMBER"
+              ? [
+                  { firstName: { contains: parsed.data.q, mode: "insensitive" as const } },
+                  { lastName: { contains: parsed.data.q, mode: "insensitive" as const } }
+                ]
+              : [
+                  { firstName: { contains: parsed.data.q, mode: "insensitive" as const } },
+                  { lastName: { contains: parsed.data.q, mode: "insensitive" as const } },
+                  { email: { contains: parsed.data.q, mode: "insensitive" as const } },
+                  { phone: { contains: parsed.data.q } }
+                ]
           }
         : {})
     };
@@ -130,6 +135,8 @@ export async function candidateRoutes(app: FastifyInstance) {
             ? [{ aggregate: { averageScore: "desc" } }, { lastName: "asc" }]
             : parsed.data.sort === "score_asc"
               ? [{ aggregate: { averageScore: "asc" } }, { lastName: "asc" }]
+              : user.chapterRole === "MEMBER"
+              ? [{ statusPosition: "asc" }, { lastName: "asc" }, { firstName: "asc" }]
               : [{ statusPosition: "asc" }, { aggregate: { averageScore: "desc" } }, { lastName: "asc" }];
 
     const skip = (parsed.data.page - 1) * parsed.data.pageSize;
@@ -152,12 +159,20 @@ export async function candidateRoutes(app: FastifyInstance) {
       prisma.candidate.count({ where })
     ]);
 
+    const photoUrls = user.chapterRole === "MEMBER"
+      ? await Promise.all(items.map((candidate) => candidate.photoKey ? createPrivateDownloadUrl(candidate.photoKey).catch(() => null) : Promise.resolve(null)))
+      : items.map(() => null);
+
     return {
-      items: items.map((candidate) => ({
+      items: items.map((candidate, index) => ({
         ...candidate,
+        email: user.chapterRole === "MEMBER" ? undefined : candidate.email,
+        phone: user.chapterRole === "MEMBER" ? undefined : candidate.phone,
+        aggregate: user.chapterRole === "MEMBER" ? undefined : candidate.aggregate,
         myEvaluation: candidate.evaluations[0] ?? null,
         evaluations: undefined,
         hasPhoto: Boolean(candidate.photoKey),
+        photoUrl: photoUrls[index],
         photoKey: undefined
       })),
       page: parsed.data.page,
@@ -600,12 +615,20 @@ export async function candidateRoutes(app: FastifyInstance) {
         return reply.code(503).send({ error: "Object storage is not configured" });
       }
 
-      const candidate = await prisma.candidate.findFirst({
-        where: { id: candidateId, chapterId: user.chapterId }
-      });
+      const [candidate, chapter] = await Promise.all([
+        prisma.candidate.findFirst({ where: { id: candidateId, chapterId: user.chapterId } }),
+        prisma.chapter.findUnique({ where: { id: user.chapterId }, select: { storageQuotaBytes: true } })
+      ]);
 
       if (!candidate) {
         return reply.code(404).send({ error: "Candidate not found" });
+      }
+
+      if (chapter?.storageQuotaBytes !== null && chapter?.storageQuotaBytes !== undefined) {
+        const usage = await privateStorageUsage(`candidate-photos/${user.chapterId}/`);
+        if (usage && BigInt(usage.totalBytes + parsed.data.byteLength) > chapter.storageQuotaBytes) {
+          return reply.code(413).send({ error: "Workspace storage quota reached" });
+        }
       }
 
       const key = `candidate-photos/${user.chapterId}/${candidate.recruitmentCycleId}/${candidate.id}/${randomUUID()}.${extensionForContentType(parsed.data.contentType)}`;

@@ -104,8 +104,8 @@ export async function dataRoutes(app: FastifyInstance) {
 
         if ((!firstName || !lastName) && mapped.fullName) {
           const split = splitFullName(mapped.fullName);
-          firstName = split?.firstName;
-          lastName = split?.lastName;
+          firstName = split?.firstName ?? "";
+          lastName = split?.lastName ?? "";
         }
 
         if (!firstName || !lastName) {

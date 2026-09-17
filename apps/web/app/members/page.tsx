@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { AppShell, PageHeader } from "../../components/app-shell";
 import { Icon } from "../../components/icons";
-import { Avatar, Badge, Button, CopyButton, EmptyState, Field, Input, Modal, Select, Toggle } from "../../components/ui";
+import { Avatar, Badge, Button, ConfirmDialog, CopyButton, EmptyState, Field, Input, Modal, Select, Toggle } from "../../components/ui";
 import { apiRequest } from "../../lib/api";
 import type { ChapterInvite, ChapterMember, Role } from "../../lib/types";
 import { useAuth } from "../../providers/auth-provider";
@@ -29,7 +29,10 @@ export default function MembersPage() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<{ type: "member"; member: ChapterMember } | { type: "invite"; invite: ChapterInvite } | null>(null);
+  const [actionBusy, setActionBusy] = useState(false);
   const [error, setError] = useState("");
+  const readOnly = context?.subscriptionAccess?.mode === "READ_ONLY";
 
   const load = async () => {
     setLoading(true);
@@ -63,33 +66,43 @@ export default function MembersPage() {
       await apiRequest(`/chapter/members/${id}/role`, { method: "PATCH", body: JSON.stringify({ role }) });
       await load();
     } catch (caught) {
-      window.alert(caught instanceof Error ? caught.message : "Unable to update role");
+      setError(caught instanceof Error ? caught.message : "Unable to update role");
     }
   };
 
   const remove = async (member: ChapterMember) => {
-    if (!window.confirm(`Remove ${member.user.firstName} ${member.user.lastName} from this workspace?`)) return;
+    setActionBusy(true);
+    setError("");
     try {
       await apiRequest(`/chapter/members/${member.id}`, { method: "DELETE" });
       await load();
+      setConfirmAction(null);
     } catch (caught) {
-      window.alert(caught instanceof Error ? caught.message : "Unable to remove member");
+      setConfirmAction(null);
+      setError(caught instanceof Error ? caught.message : "Unable to remove member");
+    } finally {
+      setActionBusy(false);
     }
   };
 
   const revoke = async (invite: ChapterInvite) => {
-    if (!window.confirm("Disable this invitation link? Anyone who has the link will no longer be able to use it.")) return;
+    setActionBusy(true);
+    setError("");
     try {
       await apiRequest(`/chapter/invites/${invite.id}`, { method: "DELETE" });
       await load();
+      setConfirmAction(null);
     } catch (caught) {
-      window.alert(caught instanceof Error ? caught.message : "Unable to revoke invitation");
+      setConfirmAction(null);
+      setError(caught instanceof Error ? caught.message : "Unable to revoke invitation");
+    } finally {
+      setActionBusy(false);
     }
   };
 
   return (
     <AppShell>
-      <PageHeader title="Members" description="Manage who can access this chapter and create reusable invitation links." actions={<Button icon="plus" onClick={() => setInviteOpen(true)}>Create invite link</Button>} />
+      <PageHeader title="Members" description={readOnly ? "Review the people and invitation history connected to this workspace. Access changes are disabled until billing is restored." : "Manage who can access this chapter and create reusable invitation links."} actions={!readOnly ? <Button icon="plus" onClick={() => setInviteOpen(true)}>Create invite link</Button> : undefined} />
       {error ? <div className="form-alert form-alert-error page-alert">{error}</div> : null}
 
       <section className="summary-strip">
@@ -103,7 +116,7 @@ export default function MembersPage() {
         <div className="panel-header simple-panel-header">
           <div><h2>Chapter members</h2><p>People who currently have access to {context?.chapter?.name ?? "this chapter"}.</p></div>
         </div>
-        <div className="table-toolbar"><div className="search-field search-field-compact"><Icon name="search" size={17} /><input placeholder="Search by name or email" value={search} onChange={(event) => setSearch(event.target.value)} /></div></div>
+        <div className="table-toolbar"><div className="search-field search-field-compact"><Icon name="search" size={17} /><input aria-label="Search chapter members" placeholder="Search by name or email" value={search} onChange={(event) => setSearch(event.target.value)} /></div></div>
         {loading ? <div className="detail-loading"><span>Loading members…</span></div> : filtered.length ? (
           <div className="data-table-wrap">
             <table className="data-table">
@@ -111,10 +124,10 @@ export default function MembersPage() {
               <tbody>{filtered.map((member) => (
                 <tr key={member.id}>
                   <td><div className="member-cell"><Avatar firstName={member.user.firstName} lastName={member.user.lastName} size={34} /><span><strong>{member.user.firstName} {member.user.lastName}</strong><small>{member.user.email}</small></span></div></td>
-                  <td><Select compact className="role-select" value={member.role} disabled={member.user.id === context?.user.id} onChange={(next) => void updateRole(member.id, next as Role)} options={[{ value: "MEMBER", label: "Member" }, { value: "MODERATOR", label: "Moderator" }, { value: "CHAPTER_ADMIN", label: "Chapter admin" }]} /></td>
+                  <td>{readOnly ? <Badge>{formatRole(member.role)}</Badge> : <Select compact className="role-select" value={member.role} disabled={member.user.id === context?.user.id} onChange={(next) => void updateRole(member.id, next as Role)} options={[{ value: "MEMBER", label: "Member" }, { value: "MODERATOR", label: "Moderator" }, { value: "CHAPTER_ADMIN", label: "Chapter admin" }]} />}</td>
                   <td>{new Date(member.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</td>
                   <td><Badge tone={member.user.isActive ? "success" : "neutral"}>{member.user.isActive ? "Active" : "Inactive"}</Badge></td>
-                  <td><button className="icon-button" disabled={member.user.id === context?.user.id} onClick={() => void remove(member)} aria-label="Remove member"><Icon name="trash" size={16} /></button></td>
+                  <td>{!readOnly ? <button type="button" className="icon-button" disabled={member.user.id === context?.user.id} onClick={() => setConfirmAction({ type: "member", member })} aria-label="Remove member"><Icon name="trash" size={16} /></button> : null}</td>
                 </tr>
               ))}</tbody>
             </table>
@@ -125,7 +138,7 @@ export default function MembersPage() {
       <section className="panel table-panel page-section">
         <div className="panel-header simple-panel-header">
           <div><h2>Invite links</h2><p>Create one link and share it with the right group. You control the role, expiration, and number of uses.</p></div>
-          <Button variant="secondary" size="sm" icon="plus" onClick={() => setInviteOpen(true)}>New link</Button>
+          {!readOnly ? <Button variant="secondary" size="sm" icon="plus" onClick={() => setInviteOpen(true)}>New link</Button> : null}
         </div>
         {invites.length ? (
           <div className="data-table-wrap">
@@ -142,16 +155,25 @@ export default function MembersPage() {
                     <td>{uses}</td>
                     <td>{invite.expiresAt ? new Date(invite.expiresAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "Never"}</td>
                     <td><Badge tone={tone}>{status === "used" ? "Used up" : status.charAt(0).toUpperCase() + status.slice(1)}</Badge></td>
-                    <td><div className="row-actions">{status === "active" && invite.inviteUrl ? <CopyButton value={invite.inviteUrl!} label="Copy" variant="ghost" /> : null}{status === "active" ? <Button variant="ghost" size="sm" onClick={() => void revoke(invite)}>Revoke</Button> : null}</div></td>
+                    <td><div className="row-actions">{!readOnly && status === "active" && invite.inviteUrl ? <CopyButton value={invite.inviteUrl!} label="Copy" variant="ghost" /> : null}{!readOnly && status === "active" ? <Button variant="ghost" size="sm" onClick={() => setConfirmAction({ type: "invite", invite })}>Revoke</Button> : null}</div></td>
                   </tr>
                 );
               })}</tbody>
             </table>
           </div>
-        ) : <EmptyState icon="mail" title="No invite links yet" copy="Create a link for members, moderators, or additional chapter admins." action={<Button onClick={() => setInviteOpen(true)}>Create invite link</Button>} />}
+        ) : <EmptyState icon="mail" title="No invite links yet" copy={readOnly ? "Invitation creation is disabled until billing is restored." : "Create a link for members, moderators, or additional chapter admins."} action={!readOnly ? <Button onClick={() => setInviteOpen(true)}>Create invite link</Button> : undefined} />}
       </section>
 
-      <InviteMemberModal open={inviteOpen} onClose={() => setInviteOpen(false)} onInvited={load} />
+      {!readOnly ? <InviteMemberModal open={inviteOpen} onClose={() => setInviteOpen(false)} onInvited={load} /> : null}
+      <ConfirmDialog
+        open={Boolean(confirmAction)}
+        onClose={() => setConfirmAction(null)}
+        onConfirm={() => confirmAction?.type === "member" ? remove(confirmAction.member) : confirmAction?.type === "invite" ? revoke(confirmAction.invite) : undefined}
+        title={confirmAction?.type === "member" ? `Remove ${confirmAction.member.user.firstName} ${confirmAction.member.user.lastName}?` : "Revoke invitation link?"}
+        description={confirmAction?.type === "member" ? "They will immediately lose access to this chapter workspace. Their historical activity remains in Biddly." : "Anyone who has this link will no longer be able to use it. Existing members are not affected."}
+        confirmLabel={confirmAction?.type === "member" ? "Remove member" : "Revoke link"}
+        busy={actionBusy}
+      />
     </AppShell>
   );
 }

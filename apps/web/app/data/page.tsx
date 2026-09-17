@@ -19,6 +19,7 @@ type AuditLog = {
 export default function DataPage() {
   const { context } = useAuth();
   const cycleId = context?.chapter?.activeRecruitmentCycle?.id;
+  const readOnly = context?.subscriptionAccess?.mode === "READ_ONLY";
   const [cycle, setCycle] = useState<RecruitmentCycle | null>(null);
   const [csv, setCsv] = useState("");
   const [filename, setFilename] = useState("");
@@ -99,14 +100,14 @@ export default function DataPage() {
   };
 
   return <AppShell>
-    <PageHeader title="Import & export" description="Bring an existing PNM list into Biddly or download clean chapter data when you need it." />
+    <PageHeader title={readOnly ? "Export data" : "Import & export"} description={readOnly ? "Your workspace is read-only until billing is restored. You can still download the chapter’s existing recruitment data." : "Bring an existing PNM list into Biddly or download clean chapter data when you need it."} />
     {!cycleId ? <div className="panel panel-spacious"><EmptyState icon="data" title="No active recruitment cycle" copy="Imports and exports operate on the chapter’s active recruitment cycle." /></div> : <div className="data-page-grid">
-      <section className="panel data-action-card">
+      {!readOnly ? <section className="panel data-action-card">
         <div className="data-action-icon"><Icon name="upload" /></div>
         <div><span className="section-kicker">Import</span><h2>Bring in a CSV</h2><p>Upload an existing spreadsheet and map each column to Biddly fields before anything is added.</p></div>
         {!csv ? <label className="file-drop"><input type="file" accept=".csv,text/csv" onChange={(event) => void chooseFile(event.target.files?.[0] ?? null)} /><Icon name="upload" size={22} /><strong>Choose CSV file</strong><span>Up to 5,000 PNMs per import</span></label> : <div className="file-selected"><div><Icon name="data" /><span><strong>{filename}</strong><small>{headers.length} columns detected</small></span></div><Button variant="ghost" size="sm" onClick={() => { setCsv(""); setHeaders([]); setFilename(""); }}>Remove</Button></div>}
-        {headers.length ? <div className="mapping-section"><div className="mapping-title"><strong>Map columns</strong><span>Match your CSV to Biddly.</span></div><div className="mapping-list">{headers.map((header) => <div className="mapping-row" key={header}><span>{header}</span><Icon name="chevron" size={14} /><Select value={mapping[header] ?? ""} onChange={(event) => setMapping((current) => ({ ...current, [header]: event.target.value }))}>{targets.map((target) => <option key={target.value} value={target.value}>{target.label}</option>)}</Select></div>)}</div><Button disabled={busy || !Object.values(mapping).some(Boolean)} onClick={() => void importCsv()}>{busy ? "Importing…" : "Import PNMs"}</Button></div> : null}
-      </section>
+        {headers.length ? <div className="mapping-section"><div className="mapping-title"><strong>Map columns</strong><span>Match your CSV to Biddly.</span></div><div className="mapping-list">{headers.map((header) => <div className="mapping-row" key={header}><span>{header}</span><Icon name="chevron" size={14} /><Select value={mapping[header] ?? ""} onChange={(value) => setMapping((current) => ({ ...current, [header]: value }))} options={targets} /></div>)}</div><Button disabled={busy || !Object.values(mapping).some(Boolean)} onClick={() => void importCsv()}>{busy ? "Importing…" : "Import PNMs"}</Button></div> : null}
+      </section> : null}
 
       <section className="panel data-action-card">
         <div className="data-action-icon"><Icon name="download" /></div>

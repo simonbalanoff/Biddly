@@ -10,17 +10,17 @@ import { useAuth } from "../../providers/auth-provider";
 
 export default function LoginPage() {
     const router = useRouter();
-    const { login } = useAuth();
+    const { context, loading, login } = useAuth();
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [error, setError] = useState("");
     const [busy, setBusy] = useState(false);
 
     useEffect(() => {
-        if (getStoredSession()) {
-            router.replace("/dashboard");
+        if (!loading && getStoredSession() && context) {
+            router.replace(context.membership?.role === "MEMBER" && context.user.platformRole !== "PLATFORM_ADMIN" ? "/candidates" : "/dashboard");
         }
-    }, [router]);
+    }, [context, loading, router]);
 
     const submit = async (event: React.FormEvent) => {
         event.preventDefault();
@@ -28,8 +28,8 @@ export default function LoginPage() {
         setBusy(true);
 
         try {
-            await login(email, password);
-            router.replace("/dashboard");
+            const next = await login(email, password);
+            router.replace(next.membership?.role === "MEMBER" && next.user.platformRole !== "PLATFORM_ADMIN" ? "/candidates" : "/dashboard");
         } catch (caught) {
             setError(
                 caught instanceof Error ? caught.message : "Unable to sign in",

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { AppShell, PageHeader } from "../../components/app-shell";
 import { Icon } from "../../components/icons";
@@ -107,15 +108,15 @@ export default function PlatformPage() {
 
       <section className="panel table-panel page-section">
         <div className="panel-header simple-panel-header"><div><h2>Chapter workspaces</h2><p>Every active chapter account on the platform.</p></div></div>
-        <div className="table-toolbar"><div className="search-field search-field-compact"><Icon name="search" size={17} /><input placeholder="Search chapters, organizations, or schools" value={search} onChange={(event) => setSearch(event.target.value)} /></div></div>
+        <div className="table-toolbar"><div className="search-field search-field-compact"><Icon name="search" size={17} /><input aria-label="Search chapter workspaces" placeholder="Search chapters, organizations, or schools" value={search} onChange={(event) => setSearch(event.target.value)} /></div></div>
         {filtered.length ? (
           <div className="data-table-wrap">
             <table className="data-table">
-              <thead><tr><th>Chapter</th><th>Organization</th><th>University</th><th>Active cycle</th><th>Members</th><th>PNMs</th></tr></thead>
-              <tbody>{filtered.map((chapter) => <tr key={chapter.id}><td><div className="table-primary"><strong>{chapter.name}</strong><small>Created {new Date(chapter.createdAt).toLocaleDateString()}</small></div></td><td>{chapter.organization.shortName || chapter.organization.name}</td><td>{chapter.university.shortName || chapter.university.name}</td><td>{chapter.activeRecruitmentCycle ? <Badge tone="success">{chapter.activeRecruitmentCycle.name}</Badge> : <Badge>No active cycle</Badge>}</td><td>{chapter._count.memberships}</td><td>{chapter._count.candidates}</td></tr>)}</tbody>
+              <thead><tr><th>Chapter</th><th>Organization</th><th>University</th><th>Active cycle</th><th>Members</th><th>PNMs</th><th /></tr></thead>
+              <tbody>{filtered.map((chapter) => <tr key={chapter.id}><td><div className="table-primary"><strong>{chapter.name}</strong><small>Created {new Date(chapter.createdAt).toLocaleDateString()}</small></div></td><td>{chapter.organization.shortName || chapter.organization.name}</td><td>{chapter.university.shortName || chapter.university.name}</td><td>{chapter.activeRecruitmentCycle ? <Badge tone="success">{chapter.activeRecruitmentCycle.name}</Badge> : <Badge>No active cycle</Badge>}</td><td>{chapter._count.memberships}</td><td>{chapter._count.candidates}</td><td><Link href={`/platform/chapters/${chapter.id}`} className="button button-secondary button-sm">View</Link></td></tr>)}</tbody>
             </table>
           </div>
-        ) : <EmptyState icon="users" title="No workspaces yet" copy="Create a workspace invitation when you are ready to onboard the first chapter." />}
+        ) : <EmptyState icon={search.trim() ? "search" : "users"} title={search.trim() ? "No matching workspaces" : "No workspaces yet"} copy={search.trim() ? "Try a different chapter, organization, or school name." : "Create a workspace invitation when you are ready to onboard the first chapter."} />}
       </section>
 
       <section className="panel table-panel page-section">

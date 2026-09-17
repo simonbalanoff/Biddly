@@ -10,8 +10,16 @@ import { prisma } from "@biddly/db";
 import { FastifyInstance } from "fastify";
 import { writeAudit } from "../lib/audit.js";
 import { env } from "../lib/env.js";
+import { sendEmail } from "../lib/email.js";
 import { requireChapterRole } from "../lib/permissions.js";
 import { createOpaqueToken, hashToken } from "../lib/tokens.js";
+
+function serializeChapter<T extends { storageQuotaBytes: bigint | null }>(chapter: T) {
+  return {
+    ...chapter,
+    storageQuotaBytes: chapter.storageQuotaBytes === null ? null : chapter.storageQuotaBytes.toString()
+  };
+}
 
 export async function chapterRoutes(app: FastifyInstance) {
   app.get("/chapter", { preHandler: [app.requireAuth] }, async (request, reply) => {
@@ -36,7 +44,7 @@ export async function chapterRoutes(app: FastifyInstance) {
       return reply.code(404).send({ error: "Chapter not found" });
     }
 
-    return chapter;
+    return serializeChapter(chapter);
   });
 
   app.patch(
@@ -68,7 +76,7 @@ export async function chapterRoutes(app: FastifyInstance) {
         return updated;
       });
 
-      return chapter;
+      return serializeChapter(chapter);
     }
   );
 
@@ -339,6 +347,21 @@ export async function chapterRoutes(app: FastifyInstance) {
         return created;
       });
 
+      const inviteUrl = `${env.APP_BASE_URL}/join?token=${encodeURIComponent(token)}`;
+      const chapter = invite.email
+        ? await prisma.chapter.findUnique({ where: { id: user.chapterId }, select: { name: true, university: { select: { name: true } } } })
+        : null;
+      const delivery = invite.email && chapter
+        ? await sendEmail({
+            to: invite.email,
+            subject: `You're invited to ${chapter.name} on Biddly`,
+            title: `Join ${chapter.name}`,
+            copy: `You've been invited to the ${chapter.name} recruitment workspace at ${chapter.university.name}.`,
+            actionLabel: "Accept invitation",
+            actionUrl: inviteUrl
+          })
+        : { configured: false, sent: false, id: null, error: null };
+
       return reply.code(201).send({
         id: invite.id,
         email: invite.email,
@@ -348,7 +371,8 @@ export async function chapterRoutes(app: FastifyInstance) {
         maxUses: invite.maxUses,
         useCount: invite.useCount,
         revokedAt: invite.revokedAt,
-        inviteUrl: `${env.APP_BASE_URL}/join?token=${encodeURIComponent(token)}`
+        inviteUrl,
+        delivery
       });
     }
   );

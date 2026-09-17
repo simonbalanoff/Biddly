@@ -126,8 +126,8 @@ export default function JoinClient({ token }: { token: string }) {
                 },
             );
             setStoredSession(result.session);
-            await refreshContext();
-            router.replace("/dashboard");
+            const next = await refreshContext();
+            router.replace(next?.membership?.role === "MEMBER" && next.user.platformRole !== "PLATFORM_ADMIN" ? "/candidates" : "/dashboard");
         } catch (caught) {
             setError(
                 caught instanceof Error
